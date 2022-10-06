@@ -4,6 +4,7 @@ use std::ops::IndexMut;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::ops::Sub;
+use std::fmt;
 
 use super::num::Def;
 use super::num::Num;
@@ -12,6 +13,8 @@ use super::num::Num;
 pub enum MatErr {
     Mul,
     Add,
+    Sqr,
+    Inv
 }
 
 #[derive(Clone)]
@@ -78,8 +81,74 @@ impl<N: Num> Mat<N> {
         Self::from_map((self.row, self.col), |c, r| self[(r, c)])
     }
 
+    pub fn cofactor(&self) -> Result<Self, MatErr> {
+        if !self.is_square() {
+            return Err(MatErr::Sqr);
+        }
+
+        Ok(Self::from_map(self.dim(), |c, r| {
+            self.minor((c, r)).unwrap().determinant().unwrap()
+                * if (c + r) % 2 == 0 { N::one()} else { N::neg() }
+        }))
+    }
+
+    pub fn adjoint(&self) -> Result<Self, MatErr> {
+        Ok(self.cofactor()?.transpose())
+    }
+
+    pub fn inverse(&self) -> Result<Self, MatErr> {
+        let det = self.determinant()?;
+
+        if det == N::zero() {
+            return Err(MatErr::Inv)
+        }
+        
+        Ok(self.adjoint()?.scale(det.inv()))
+    }
+
+    pub fn determinant(&self) -> Result<N, MatErr> {
+        if !self.is_square() {
+            return Err(MatErr::Sqr);
+        }
+
+        if self.col == 2 {
+            return Ok(self[(0, 0)] * self[(1, 1)] - self[(0, 1)] * self[(1, 0)]);
+        }
+
+        Ok((0..self.row).fold(N::zero(), |acc, i| {
+            self.minor((0, i)).unwrap().determinant().unwrap()
+                * self[(0, i)]
+                * if i % 2 == 0 { N::one() } else { N::neg() }
+                + acc
+        }))
+    }
+
+    pub fn minor(&self, (col, row): (usize, usize)) -> Result<Self, MatErr> {
+        if !self.is_square() {
+            return Err(MatErr::Sqr);
+        }
+
+        Ok(Self::from_map((self.col - 1, self.row - 1), |c, r| {
+            let co = if c < col { 0 } else { 1 };
+            let ro = if r < row { 0 } else { 1 };
+            self[(c + co, r + ro)]
+        }))
+    }
+
+    pub fn to_index((col, row): (usize, usize)) -> usize {
+        col * row + row
+    }
+
+    pub fn to_coord(&self, index: usize) -> (usize, usize) {
+        (index / self.row, index % self.row)
+    }
+
     pub fn dim(&self) -> (usize, usize) {
         (self.col, self.row)
+    }
+
+    pub fn is_square(&self) -> bool {
+        self.col == self.row
     }
 
     pub fn buf(&self) -> &Vec<N> {
@@ -97,6 +166,39 @@ impl<N: Num> Mat<N> {
     pub fn rows(&self) -> Rows<'_, N> {
         Rows::from(self)
     }
+
+    pub fn iter(&self) -> MatIter<'_, N> {
+        MatIter::from(self)
+    }
+
+    pub fn add(&self, rhs: &Self) -> Result<Self, MatErr> {
+        if self.dim() != rhs.dim() {
+            return Err(MatErr::Add);
+        }
+
+        Ok(Self::from_map(self.dim(), |c, r| {
+            self[(c, r)] + rhs[(c, r)]
+        }))
+    }
+
+    pub fn mul(&self, rhs: &Self) -> Result<Self, MatErr> {
+        if self.row != rhs.col {
+            return Err(MatErr::Mul);
+        }
+
+        Ok(Self::from_map((self.col, rhs.row), |c, r| {
+            self.rows()
+                .get(c)
+                .unwrap()
+                .iter()
+                .zip(rhs.cols().get(r).unwrap().iter())
+                .fold(N::zero(), |acc, (v1, v2)| acc + (*v1) * (*v2))
+        }))
+    }
+
+    pub fn scale(&self, scalar: N) -> Self {
+        Self::from_map(self.dim(), |c, r| scalar * self[(c, r)])
+    }
 }
 
 impl<N: Num> Index<(usize, usize)> for Mat<N> {
@@ -107,9 +209,36 @@ impl<N: Num> Index<(usize, usize)> for Mat<N> {
     }
 }
 
+impl<N: Num> fmt::Display for Mat<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let buf = self.rows().fold(String::new(), |acc, row| format!("{}\n{:?}", acc, row));
+        write!(f, "{}", buf)
+    }
+}
+
+pub struct MatIter<'m, N: Num> {
+    mat: &'m Mat<N>,
+    i: usize,
+}
+
 pub struct Cols<'m, N: Num> {
     mat: &'m Mat<N>,
     i: usize,
+}
+
+impl<'m, N: Num> From<&'m Mat<N>> for MatIter<'m, N> {
+    fn from(mat: &'m Mat<N>) -> Self {
+        MatIter { mat, i: 0 }
+    }
+}
+
+impl<'m, N: Num> Iterator for MatIter<'m, N> {
+    type Item = N;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.i += 1;
+        Some(self.mat.buf()[self.i - 1])
+    }
 }
 
 impl<'m, N: Num> Cols<'m, N> {
@@ -190,54 +319,5 @@ impl<'m, N: Num> Iterator for Rows<'m, N> {
     fn next(&mut self) -> Option<Self::Item> {
         self.i += 1;
         self.get(self.i - 1)
-    }
-}
-
-impl<N: Num> Mul for &Mat<N> {
-    type Output = Result<Mat<N>, MatErr>;
-
-    fn mul(self, rhs: Self) -> Self::Output {
-        if self.row != rhs.col {
-            return Err(MatErr::Mul);
-        }
-
-        Ok(Mat::<N>::from_map((self.col, rhs.row), |c, r| {
-            self.rows()
-                .get(c)
-                .unwrap()
-                .iter()
-                .zip(rhs.cols().get(r).unwrap().iter())
-                .fold(N::zero(), |acc, (v1, v2)| acc + (*v1) * (*v2))
-        }))
-    }
-}
-
-impl<N: Num> Add for &Mat<N> {
-    type Output = Result<Mat<N>, MatErr>;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        if self.dim() != rhs.dim() {
-            return Err(MatErr::Add);
-        }
-
-        Ok(Mat::<N>::from_map(self.dim(), |c, r| {
-            self[(c, r)] + rhs[(c, r)]
-        }))
-    }
-}
-
-impl<N: Num> Mul<N> for &Mat<N> {
-    type Output = Mat<N>;
-
-    fn mul(self, rhs: N) -> Self::Output {
-        Mat::<N>::from_map(self.dim(), |c, r| rhs * self[(c, r)])
-    }
-}
-
-impl<N: Num> MulAssign<N> for Mat<N> {
-    fn mul_assign(&mut self, rhs: N) {
-        for v in self.buf_mut().iter_mut() {
-            *v *= rhs;
-        }
     }
 }
