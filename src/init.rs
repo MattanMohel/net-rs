@@ -1,21 +1,22 @@
-use super::num::Num;
+use super::num::N;
 
-pub enum Init {
+#[derive(Clone, Copy)]
+pub enum Weight {
     Rand,
     He,
 }
 
-impl Init {
-    pub fn eval<N: Num>(&self, l: usize, l1: usize) -> f64 {
-        let l = l as f64;
+impl Weight {
+    pub fn init(&self, l: usize, l1: usize) -> N {
+        let l  = l  as f64;
         let l1 = l1 as f64;
         
-        let r = rand::random::<f64>() * l.max(l1) as f64 + l.min(l1) as f64;
+        let r = rand::random::<N>() * l.max(l1) + l.min(l1);
         
         r * {
             match self {
-                Init::Rand => 1.,
-                Init::He   => (2. /  l).sqrt()
+                Weight::Rand => 1.,
+                Weight::He   => (2. /  l).sqrt()
             }
         }
     }

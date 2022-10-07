@@ -1,1 +1,1 @@
-/home/runner/net-rs/target/debug/my-project: /home/runner/net-rs/src/main.rs /home/runner/net-rs/src/mat.rs /home/runner/net-rs/src/num.rs
+C:\repo\Rust\net-rs\target\debug\my-project.exe: C:\repo\Rust\net-rs\src\main.rs C:\repo\Rust\net-rs\src\mat.rs C:\repo\Rust\net-rs\src\num.rs

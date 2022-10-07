@@ -6,7 +6,7 @@ use std::ops::Mul;
 use std::ops::MulAssign;
 use std::*;
 
-pub type Def = f32;
+pub type N = f64;
 
 pub trait Num:
     PartialEq +

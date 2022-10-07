@@ -1,16 +1,26 @@
-use super::num::Num;
-use std::f64::consts;
+use super::num::N;
+use std::f64::consts::E;
 
-pub enum Act {
+#[derive(Clone, Copy)]
+pub enum Activation {
     Sig,
     Lin
 }
 
-impl Act {
-    pub fn act<N: Num>(self, n: f64) -> f64 {
+use Activation::*;
+
+impl Activation {
+    pub fn activate(&self, n: N) -> N {
         match self {
-            Act::Lin => n,
-            Act::Sig => 1. / (1. + consts::E.powf(n))
+            Lin => n,
+            Sig => 1. / (1. + E.powf(-n))
+        }
+    }
+
+    pub fn derivate(&self, n: N) -> N {
+        match self {
+            Lin => 1.,
+            Sig => 1. / (2. + E.powf(n) + E.powf(-n))
         }
     }
 }

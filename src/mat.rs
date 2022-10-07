@@ -6,7 +6,7 @@ use std::ops::MulAssign;
 use std::ops::Sub;
 use std::fmt;
 
-use super::num::Def;
+use super::num::N;
 use super::num::Num;
 
 #[derive(Debug)]
@@ -18,13 +18,13 @@ pub enum MatErr {
 }
 
 #[derive(Clone)]
-pub struct Mat<N: Num = Def> {
-    buf: Vec<N>,
-    col: usize,
+pub struct Mat<T: Num = N> {
+    buf: Vec<T>,
     row: usize,
+    col: usize,
 }
 
-impl<N: Num> Mat<N> {
+impl<T: Num> Mat<T> {
     pub fn empty() -> Self {
         Self {
             buf: Vec::new(),
@@ -33,7 +33,7 @@ impl<N: Num> Mat<N> {
         }
     }
 
-    pub fn from_arr<const C: usize, const R: usize>(arr: [[N; C]; R]) -> Self {
+    pub fn from_arr<const C: usize, const R: usize>(arr: [[T; C]; R]) -> Self {
         let buf = arr.iter().flatten().cloned().collect();
 
         Self {
@@ -43,42 +43,42 @@ impl<N: Num> Mat<N> {
         }
     }
 
-    pub fn from_vec((col, row): (usize, usize), buf: Vec<N>) -> Self {
-        Self { buf, col, row }
+    pub fn from_vec((row, col): (usize, usize), buf: Vec<T>) -> Self {
+        Self { buf, row, col }
     }
 
-    pub fn from_fn<F>((col, row): (usize, usize), f: F) -> Self
+    pub fn from_fn<F>((row, col): (usize, usize), f: F) -> Self
     where
-        F: Fn() -> N,
+        F: Fn() -> T,
     {
-        let buf = (0..col * row).map(|_| f()).collect();
+        let buf = (0..row*col).map(|_| f()).collect();
 
-        Self { buf, col, row }
+        Self { buf, row, col }
     }
 
-    pub fn from_map<F>((col, row): (usize, usize), map: F) -> Self
+    pub fn from_map<F>((row, col): (usize, usize), map: F) -> Self
     where
-        F: Fn(usize, usize) -> N,
+        F: Fn(usize, usize) -> T,
     {
-        let buf = (0..col * row).map(|i| map(i / row, i % row)).collect();
+        let buf = (0..row*col).map(|i| map(i / col, i % col)).collect();
 
-        Self { buf, col, row }
+        Self { buf, row, col }
     }
 
-    pub fn fill((col, row): (usize, usize), fill: N) -> Self {
-        Self::from_map((col, row), |_, _| fill)
+    pub fn fill((row, col): (usize, usize), fill: T) -> Self {
+        Self::from_fn((row, col), || fill)
     }
 
-    pub fn zeros((col, row): (usize, usize)) -> Self {
-        Self::from_map((col, row), |_, _| N::zero())
+    pub fn zeros((row, col): (usize, usize)) -> Self {
+        Self::from_fn((row, col), || T::zero())
     }
 
     pub fn identity(len: usize) -> Self {
-        Self::from_map((len, len), |c, r| if c == r { N::one() } else { N::zero() })
+        Self::from_map((len, len), |r, c| if c == r { T::one() } else { T::zero() })
     }
 
     pub fn transpose(&self) -> Self {
-        Self::from_map((self.row, self.col), |c, r| self[(r, c)])
+        Self::from_map((self.row, self.col), |r, c| self[(c, r)])
     }
 
     pub fn cofactor(&self) -> Result<Self, MatErr> {
@@ -86,9 +86,9 @@ impl<N: Num> Mat<N> {
             return Err(MatErr::Sqr);
         }
 
-        Ok(Self::from_map(self.dim(), |c, r| {
-            self.minor((c, r)).unwrap().determinant().unwrap()
-                * if (c + r) % 2 == 0 { N::one()} else { N::neg() }
+        Ok(Self::from_map(self.dim(), |r, c| {
+            self.minor((r, c)).unwrap().determinant().unwrap()
+                * if (r + c) % 2 == 0 { T::one()} else { T::neg() }
         }))
     }
 
@@ -99,14 +99,14 @@ impl<N: Num> Mat<N> {
     pub fn inverse(&self) -> Result<Self, MatErr> {
         let det = self.determinant()?;
 
-        if det == N::zero() {
+        if det == T::zero() {
             return Err(MatErr::Inv)
         }
         
         Ok(self.adjoint()?.scale(det.inv()))
     }
 
-    pub fn determinant(&self) -> Result<N, MatErr> {
+    pub fn determinant(&self) -> Result<T, MatErr> {
         if !self.is_square() {
             return Err(MatErr::Sqr);
         }
@@ -115,59 +115,79 @@ impl<N: Num> Mat<N> {
             return Ok(self[(0, 0)] * self[(1, 1)] - self[(0, 1)] * self[(1, 0)]);
         }
 
-        Ok((0..self.row).fold(N::zero(), |acc, i| {
+        Ok((0..self.row).fold(T::zero(), |acc, i| {
             self.minor((0, i)).unwrap().determinant().unwrap()
                 * self[(0, i)]
-                * if i % 2 == 0 { N::one() } else { N::neg() }
+                * if i % 2 == 0 { T::one() } else { T::neg() }
                 + acc
         }))
     }
 
-    pub fn minor(&self, (col, row): (usize, usize)) -> Result<Self, MatErr> {
+    pub fn minor(&self, (row, col): (usize, usize)) -> Result<Self, MatErr> {
         if !self.is_square() {
             return Err(MatErr::Sqr);
         }
 
-        Ok(Self::from_map((self.col - 1, self.row - 1), |c, r| {
-            let co = if c < col { 0 } else { 1 };
+        Ok(Self::from_map((self.row - 1, self.col - 1), |r, c| {
             let ro = if r < row { 0 } else { 1 };
-            self[(c + co, r + ro)]
+            let co = if c < col { 0 } else { 1 };
+            self[(r + ro, c + co)]
         }))
     }
 
-    pub fn to_index((col, row): (usize, usize)) -> usize {
-        col * row + row
+    pub fn to_index(&self, (row, col): (usize, usize)) -> usize {
+        self.col * row + col
     }
 
     pub fn to_coord(&self, index: usize) -> (usize, usize) {
-        (index / self.row, index % self.row)
+        (index / self.col, index % self.col)
     }
 
     pub fn dim(&self) -> (usize, usize) {
-        (self.col, self.row)
+        (self.row, self.col)
+    }
+
+    pub fn row(&self) -> usize {
+        self.row
+    }
+    
+    pub fn col(&self) -> usize {
+        self.col
     }
 
     pub fn is_square(&self) -> bool {
         self.col == self.row
     }
 
-    pub fn buf(&self) -> &Vec<N> {
+    pub fn buf(&self) -> &Vec<T> {
         &self.buf
     }
 
-    pub fn buf_mut(&mut self) -> &mut Vec<N> {
+    pub fn buf_mut(&mut self) -> &mut Vec<T> {
         &mut self.buf
     }
 
-    pub fn cols(&self) -> Cols<'_, N> {
+    pub fn rows(&self) -> Rows<'_, T> {
+        Rows::from(self)
+    }
+        
+    pub fn get_row(&self, row: usize) -> Vec<T> {  
+        (0..self.col)
+            .map(|i| self.buf[row * self.col + i])
+            .collect()
+    }
+
+    pub fn cols(&self) -> Cols<'_, T> {
         Cols::from(self)
     }
 
-    pub fn rows(&self) -> Rows<'_, N> {
-        Rows::from(self)
-    }
+    pub fn get_col(&self, col: usize) -> Vec<T> {
+        (0..self.row)
+            .map(|i| self.buf[col + i * self.col])
+            .collect()
+    }    
 
-    pub fn iter(&self) -> MatIter<'_, N> {
+    pub fn iter(&self) -> MatIter<'_, T> {
         MatIter::from(self)
     }
 
@@ -176,64 +196,60 @@ impl<N: Num> Mat<N> {
             return Err(MatErr::Add);
         }
 
-        Ok(Self::from_map(self.dim(), |c, r| {
-            self[(c, r)] + rhs[(c, r)]
+        Ok(Self::from_map(self.dim(), |r, c| {
+            self[(r, c)] + rhs[(r, c)]
         }))
     }
 
     pub fn mul(&self, rhs: &Self) -> Result<Self, MatErr> {
-        if self.row != rhs.col {
+        if self.col != rhs.row {
             return Err(MatErr::Mul);
         }
 
-        Ok(Self::from_map((self.col, rhs.row), |c, r| {
-            self.rows()
-                .get(c)
-                .unwrap()
+        Ok(Self::from_map((self.row, rhs.col), |r, c| {
+            self
+                .get_row(r)
                 .iter()
-                .zip(rhs.cols().get(r).unwrap().iter())
-                .fold(N::zero(), |acc, (v1, v2)| acc + (*v1) * (*v2))
+                .zip(rhs.get_col(c).iter())
+                .fold(T::zero(), |acc, (v1, v2)| acc + (*v1) * (*v2))
         }))
     }
 
-    pub fn scale(&self, scalar: N) -> Self {
+    pub fn scale(&self, scalar: T) -> Self {
         Self::from_map(self.dim(), |c, r| scalar * self[(c, r)])
     }
 }
 
-impl<N: Num> Index<(usize, usize)> for Mat<N> {
-    type Output = N;
+impl<T: Num> Index<(usize, usize)> for Mat<T> {
+    type Output = T;
 
     fn index(&self, (col, row): (usize, usize)) -> &Self::Output {
         &self.buf[self.row * col + row]
     }
 }
 
-impl<N: Num> fmt::Display for Mat<N> {
+impl<T: Num> fmt::Display for Mat<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let buf = self.rows().fold(String::new(), |acc, row| format!("{}\n{:?}", acc, row));
         write!(f, "{}", buf)
     }
 }
 
-pub struct MatIter<'m, N: Num> {
-    mat: &'m Mat<N>,
+
+/// Iterates Matrix rows by element
+pub struct MatIter<'m, T: Num> {
+    mat: &'m Mat<T>,
     i: usize,
 }
 
-pub struct Cols<'m, N: Num> {
-    mat: &'m Mat<N>,
-    i: usize,
-}
-
-impl<'m, N: Num> From<&'m Mat<N>> for MatIter<'m, N> {
-    fn from(mat: &'m Mat<N>) -> Self {
+impl<'m, T: Num> From<&'m Mat<T>> for MatIter<'m, T> {
+    fn from(mat: &'m Mat<T>) -> Self {
         MatIter { mat, i: 0 }
     }
 }
 
-impl<'m, N: Num> Iterator for MatIter<'m, N> {
-    type Item = N;
+impl<'m, T: Num> Iterator for MatIter<'m, T> {
+    type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.i += 1;
@@ -241,83 +257,51 @@ impl<'m, N: Num> Iterator for MatIter<'m, N> {
     }
 }
 
-impl<'m, N: Num> Cols<'m, N> {
-    fn get(&self, col: usize) -> Option<Vec<N>> {
-        if col >= self.mat.dim().1 {
-            return None;
-        }
-
-        Some(
-            self.mat
-                .buf()
-                .iter()
-                .enumerate()
-                .filter_map(|(i, v)| {
-                    if i % self.mat.dim().1 == col {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        )
-    }
+/// Iterates Matrix by columns
+pub struct Cols<'m, T: Num> {
+    mat: &'m Mat<T>,
+    i: usize,
 }
 
-impl<'m, N: Num> From<&'m Mat<N>> for Cols<'m, N> {
-    fn from(mat: &'m Mat<N>) -> Self {
+impl<'m, T: Num> From<&'m Mat<T>> for Cols<'m, T> {
+    fn from(mat: &'m Mat<T>) -> Self {
         Cols { mat, i: 0 }
     }
 }
 
-impl<'m, N: Num> Iterator for Cols<'m, N> {
-    type Item = Vec<N>;
+impl<'m, T: Num> Iterator for Cols<'m, T> {
+    type Item = Vec<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.i == self.mat.col() {
+            return None;
+        }
+        
         self.i += 1;
-        self.get(self.i - 1)
+        Some(self.mat.get_col(self.i - 1))
     }
 }
 
-pub struct Rows<'m, N: Num> {
-    mat: &'m Mat<N>,
+pub struct Rows<'m, T: Num> {
+    mat: &'m Mat<T>,
     i: usize,
 }
 
-impl<'m, N: Num> Rows<'m, N> {
-    fn get(&self, row: usize) -> Option<Vec<N>> {
-        if row >= self.mat.dim().0 {
-            return None;
-        }
-
-        Some(
-            self.mat
-                .buf()
-                .iter()
-                .enumerate()
-                .filter_map(|(i, v)| {
-                    if i / self.mat.dim().1 == row {
-                        Some(*v)
-                    } else {
-                        None
-                    }
-                })
-                .collect(),
-        )
-    }
-}
-
-impl<'m, N: Num> From<&'m Mat<N>> for Rows<'m, N> {
-    fn from(mat: &'m Mat<N>) -> Self {
+impl<'m, T: Num> From<&'m Mat<T>> for Rows<'m, T> {
+    fn from(mat: &'m Mat<T>) -> Self {
         Rows { mat, i: 0 }
     }
 }
 
-impl<'m, N: Num> Iterator for Rows<'m, N> {
-    type Item = Vec<N>;
+impl<'m, T: Num> Iterator for Rows<'m, T> {
+    type Item = Vec<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.i == self.mat.row() {
+            return None;
+        }
+        
         self.i += 1;
-        self.get(self.i - 1)
+        Some(self.mat.get_row(self.i - 1))
     }
 }
