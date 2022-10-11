@@ -1,10 +1,14 @@
 use std::fmt;
 use std::ops::Add;
+use std::ops::AddAssign;
 use std::ops::Sub;
 use std::ops::Div;
 use std::ops::Mul;
 use std::ops::MulAssign;
 use std::*;
+use std::ops::SubAssign;
+
+use rand::distributions::Distribution;
 
 pub type N = f64;
 
@@ -13,8 +17,10 @@ pub trait Num:
     Add<Output=Self> + 
     Sub<Output=Self> +
     Mul<Output=Self> +
-    MulAssign + Copy + Sized + 
-    fmt::Display + fmt::Debug
+    MulAssign + 
+    AddAssign + 
+    SubAssign +
+    Copy + Sized + fmt::Display + fmt::Debug
 {
     fn inv(&self) -> Self;
     fn zero() -> Self;
