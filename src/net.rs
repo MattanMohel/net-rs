@@ -1,3 +1,4 @@
+use crate::mat::MatCollect;
 use crate::mat::MatErr;
 use crate::mat::MatErrType;
 
@@ -29,25 +30,35 @@ impl<const L: usize> Net<L> {
         }
 
         Ok(Self { 
-            form,
-
-            weights: {
-                (0..form.len() - 1)
-                    .map(|i| Mat::random((form[i + 1], form[i]), N::neg(), N::one()).scaled(form[i] as N))
-                    .collect()
-            },
-            biases:  {
-                (0..form.len() - 1)
-                    .map(|i| Mat::zeros((form[i + 1], 1)))
-                    .collect()
-            },
+            act: Act::Sig,
+            cost: Cost::Quad,
 
             batch_size: 64,
             learn_rate: 0.01,
 
-            act: Act::Sig,
-            cost: Cost::Quad
+            biases: Self::new_biases(&form),
+            weights: Self::new_weights(&form),
+            form
         })
+    }
+
+    pub fn new_weights(form: &[usize; L]) -> Vec<Mat> {
+        (0..form.len() - 1)
+            .map(|i| {
+                let l1 = form[i];
+                let l2 = form[i+1];
+                Mat::random((l2, l1), N::neg(), N::one()).scaled(l1 as N)
+            })
+            .collect()
+    }
+
+    pub fn new_biases(form: &[usize; L]) -> Vec<Mat> {
+        (0..form.len() - 1)
+            .map(|i| {
+                let l2 = form[i+1];
+                Mat::zeros((l2, 1))
+            })
+            .collect()
     }
 
     pub fn len(&self) -> usize {
@@ -63,34 +74,57 @@ impl<const L: usize> Net<L> {
             .iter()
             .zip(self.biases.iter())
             .fold(input.clone(), |acc, (w, b)| {
-                w.mul(&acc).unwrap().add(&b).unwrap().iter().map(|e| self.act.act(e)).collect()
+                w
+                    .mul(&acc)
+                    .unwrap()
+                    .add(&b)
+                    .unwrap()
+                    .iter()
+                    .map(|e| self.act.act(*e))
+                    .to_matrix((w.rows(), 1))
+                    .unwrap()
             }))
     }
 
-    pub fn train(&mut self, input: Mat, expected: Mat) -> MatErr {
+    pub fn train(&mut self, input: Mat, exp: Mat) -> MatErr {
         let mut acts = vec![input];
         let mut sums = Vec::new();
 
         for i in 0..self.len() {
             let sum = self.weights[i].mul(&acts[i])?.add(&self.biases[i])?;
-            let act = sum.mapped(|e| self.act.act(e));
+            let act = sum.mapped(|elem| self.act.act(elem));
 
             sums.push(sum);
             acts.push(act);
         }
 
-        let mut i = 0;
-        let d_cost = acts[self.len()].mapped(|n| {
-            i += 1;
-            self.cost.d_cost(n, expected[(i - 1, 0)])
-        });
+        let gradient = acts[self.len()].iter().zip(exp.iter())
+            .map(|(a, e)| self.cost.d_cost(*a, *e))
+            .to_matrix(exp.dim())?;
 
-        let mut err = sums[self.len()].col_diagonal()?.mul(&d_cost)?;
+        let mut err = sums[self.len()]
+            .hadamard(&gradient)?
+            .col_diagonal()?;
         
         let mut d_ws = Vec::new();
-        let mut errs = Vec::new();
+        let mut errs: Vec<Mat> = Vec::new();
 
         for i in (0..self.len()).rev() {
+            let l2 = self.form[i];
+            let l1 = self.form[i-1];
+
+
+            // TODO: implement from_cols/from_rows and use here
+            for j in 0..l2 {
+                acts[i-1].scaled(err[(j, 0)]);
+            }
+
+            let d_w = Mat::from_map((self.form[i], self.form[i-1]), |r, c| {
+                errs[i][(r, 0)] * acts[i-1][(r, c)]
+            });
+
+            let d_b = &errs[i];
+
             // let act = acts[i].transpose().as_row(2)?;
             // let d_w = err.col_diagonal()?.mul(&act)?;
 

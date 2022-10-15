@@ -77,6 +77,9 @@ impl<T: Num> Mat<T> {
         })
     }
 
+    // TODO: Add 'from_rows' & 'from_cols' which will map by accpeted vectors of columns
+    // or rows rather than elements
+
     /// Creates matrix from map over dimensions `(row, col)` in row by column 
     /// order where each iteration intakes its index and outputs the cell value
     pub fn from_map<F>((row, col): (usize, usize), mut map: F) -> Self
@@ -334,19 +337,33 @@ impl<T: Num> Mat<T> {
         }))
     }
 
+    /// Returns the hadamard product of two matrices, returning a
+    /// matrix with dimensions `self.dim()`
+    /// ## Conditions
+    /// - `self.dim() == other.dim()`
+    pub fn hadamard(&self, other: &Self) -> MatErr<Self> {
+        if self.dim() != other.dim() {
+            return Err(Mul);
+        }
+
+        Ok(Self::from_map(self.dim(), |r, c| {
+            self[(r, c)] * other[(r, c)]
+        }))
+    }
+
     /// Returns the product of two matrices, returning a
     /// matrix with dimensions `(self.rows(), other.cols())`
     /// ## Conditions
     /// - `self.cols() == other.rows()`
-    pub fn mul(&self, rhs: &Self) -> MatErr<Self> {
-        if self.col != rhs.row {
+    pub fn mul(&self, other: &Self) -> MatErr<Self> {
+        if self.col != other.row {
             return Err(Mul);
         }
 
-        Ok(Self::from_map((self.row, rhs.col), |r, c| {
+        Ok(Self::from_map((self.row, other.col), |r, c| {
             self
                 .row(r)
-                .zip(rhs.col(c))
+                .zip(other.col(c))
                 .fold(T::zero(), |acc, (v1, v2)| acc + (*v1) * (*v2))
         }))
     }
@@ -354,6 +371,16 @@ impl<T: Num> Mat<T> {
     /// Returns a matrix scaled by a factor of `scalar`
     pub fn scaled(&self, scalar: T) -> Self {
         Self::from_map(self.dim(), |r, c| scalar * self[(r, c)])
+    }
+
+    /// Returns a matrix transformed by `map`
+    pub fn mapped<F>(&self, mut map: F) -> Self
+    where
+        F: FnMut(T) -> T
+    {
+        Self::from_map(self.dim(), |r, c| {
+            map(self[(r, c)])
+        })
     }
 }
 
@@ -363,7 +390,7 @@ where
     Self: Iterator + IntoIterator<Item = T>,
     Vec<T>: FromIterator<<Self as Iterator>::Item>
 {
-    fn collect_dim(&mut self, (row, col): (usize, usize)) -> MatErr<Mat<T>> {
+    fn to_matrix(&mut self, (row, col): (usize, usize)) -> MatErr<Mat<T>> {
         let buf = self.into_iter().collect();       
         Mat::<T>::from_vec((row, col), buf)
     }

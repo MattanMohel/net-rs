@@ -1,6 +1,6 @@
 pub mod mat;
 pub mod num;
-// pub mod net;
+pub mod net;
 pub mod act;
 pub mod cost;
 
@@ -14,13 +14,13 @@ use num::N;
 use mat::Mat;
 use mat::MatErr;
 use mat::MatCollect;
-// use net::Net;
+use net::Net;
 
 fn main() -> Result<(), MatErrType> {
     let m1 = Mat::<f64>::from_arr([[1., 4., 6.], [5., 9., 7.], [8., 11., 13.], [99., 0., 7.7]]);
     let m2 = Mat::<f64>::from_arr([[1., 4.], [5., 9.], [8., 11.]]);
 
-    let i = m1.iter().map(|e| 10. * e).collect_dim((4, 3));
+    let i = m1.iter().map(|e| 10. * e).to_matrix((4, 3));
 
     // println!("{m1}");
 
