@@ -1,25 +1,30 @@
-use std::iter::Map;
-use std::iter::Skip;
-use std::iter::StepBy;
-use std::iter::Take;
-use std::ops::Add;
-use std::ops::Index;
-use std::ops::IndexMut;
-use std::ops::Mul;
-use std::ops::MulAssign;
-use std::ops::Range;
-use std::ops::Sub;
+use std::iter::{
+    Skip,
+    Take,
+    StepBy
+};
+use std::slice::{
+    Iter,
+    IterMut
+};
+use std::ops::{
+    Index,
+    IndexMut,
+};
+use super::num::{
+    N,
+    Num
+};
 use std::fmt;
-use std::slice::Iter;
-
-use super::num::N;
-use super::num::Num;
-
-use rand::distributions::Standard;
 use rand::prelude::*;
+use rand::distributions::Standard;
+
+
+/// Type representing a Matrix Error
+pub type MatErr<T=()> = Result<T, MatErrType>;
 
 #[derive(Debug)]
-pub enum MatErr {
+pub enum MatErrType {
     Mul,
     Add,
     Sqr,
@@ -27,14 +32,7 @@ pub enum MatErr {
     Dim
 }
 
-pub fn vec_map<F, T>(len: usize, f: F)  -> Vec<T>
-where 
-    F: Fn(usize) -> T
-{
-    (0..len)
-        .map(|i| f(i))
-        .collect()
-}
+use MatErrType::*;
 
 #[derive(Clone)]
 pub struct Mat<T: Num = N> {
@@ -44,6 +42,7 @@ pub struct Mat<T: Num = N> {
 }
 
 impl<T: Num> Mat<T> {
+    /// Creates empty matrix with dimensions `(0, 0)`
     pub fn empty() -> Self {
         Self {
             buf: Vec::new(),
@@ -52,6 +51,7 @@ impl<T: Num> Mat<T> {
         }
     }
 
+    /// Creates matrix from 2D-array with dimensions `(row, col)` where `row == R` and `col == C`
     pub fn from_arr<const C: usize, const R: usize>(arr: [[T; C]; R]) -> Self {
         let buf = arr.iter().copied().flatten().collect();
 
@@ -62,135 +62,161 @@ impl<T: Num> Mat<T> {
         }
     }
 
-    pub fn as_row(&self, row: usize) -> Result<Self, MatErr> {
-        if self.row != 1 {
-            return Err(MatErr::Dim)
+    /// Creates matrix from buffer with dimensions `(row, col)`.
+    /// ## Conditions
+    /// - `row * col == buf.len()`
+    pub fn from_vec((row, col): (usize, usize), buf: Vec<T>) -> MatErr<Mat<T>> {
+        if row * col != buf.len() {
+            return Err(Dim)
         }
-
-        let buf = self.buf.iter().copied().cycle().take(row * self.col).collect();
-    
-        Ok(Self { 
-            buf,
-            row, 
-            col: self.col
-        })
-    }
-
-    pub fn as_col<const R: usize>(&self, col: usize) -> Result<Self, MatErr> {
-        if self.col != 1 {
-            return Err(MatErr::Dim)
-        }
-
-        let buf = self.buf.iter().copied().flat_map(|n| std::iter::repeat(n).take(col)).collect();
         
         Ok(Self { 
-            buf,
-            col,
-            row: self.row
+            buf, 
+            row, 
+            col 
         })
     }
 
-    pub fn from_vec((row, col): (usize, usize), buf: Vec<T>) -> Self {
-        Self { buf, row, col }
-    }
-
-    pub fn from_fn<F>((row, col): (usize, usize), mut f: F) -> Self
-    where
-        F: FnMut() -> T,
-    {
-        let buf = (0..row*col).map(|_| f()).collect();
-
-        Self { buf, row, col }
-    }
-
+    /// Creates matrix from map over dimensions `(row, col)` in row by column 
+    /// order where each iteration intakes its index and outputs the cell value
     pub fn from_map<F>((row, col): (usize, usize), mut map: F) -> Self
     where
         F: FnMut(usize, usize) -> T,
     {
         let buf = (0..row*col).map(|i| map(i / col, i % col)).collect();
 
-        Self { buf, row, col }
+        Self { 
+            buf, 
+            row, 
+            col 
+        }
     }
 
+    /// Creates matrix from map over dimensions `(row, col)` in row by collumn 
+    /// order where each iteration takle no index and outputs the cell value
+    pub fn from_fn<F>((row, col): (usize, usize), mut f: F) -> Self
+    where
+        F: FnMut() -> T,
+    {
+        let buf = (0..row*col).map(|_| f()).collect();
+
+        Self { 
+            buf, 
+            row, 
+            col 
+        }
+    }
+
+    /// Creates matrix with dimensions `(row, col)` filled with zeroes
+    pub fn zeros((row, col): (usize, usize)) -> Self {
+        Self::from_fn((row, col), || T::zero())
+    }
+    
+    /// Creates matrix with dimensions `(row, col)` filled with a value
     pub fn fill((row, col): (usize, usize), fill: T) -> Self {
         Self::from_fn((row, col), || fill)
     }
 
-    pub fn zeros((row, col): (usize, usize)) -> Self {
-        Self::from_fn((row, col), || T::zero())
-    }
-
+    /// Creates matrix with dimensions `(row, col)` filled with random values between `[min, max)`
     pub fn random((row, col): (usize, usize), min: T, max: T) -> Self 
     where 
         Standard: Distribution<T>
     {
-        rand::random();
         let mut rng = rand::thread_rng();
         Self::from_fn((row, col), || rng.gen() * (max - min) + min)
     }
 
+    /// Creates identity matrix with dimensions `(len, len)`
     pub fn identity(len: usize) -> Self {
-        Self::from_map((len, len), |r, c| if c == r { T::one() } else { T::zero() })
+        Self::from_map((len, len), |r, c| {
+            if c == r { 
+                T::one() 
+            } 
+            else { 
+                T::zero() 
+            }
+        })
     }
 
-    pub fn as_identity(&self) -> Result<Self, MatErr> {
-        if self.row == 1 {
-            Ok(Self::from_map((self.col, self.col), |r, c| {
-                if c == r { 
-                    self[(1, c)] 
-                } 
-                else {
-                    T::zero()
-                }
-            }))
+    /// Creates diagonal "identity" matrix filled by row values. Given
+    /// the input `[1, 2, 3]` it outputs `[[1, 0, 0], [0, 2, 0], [0, 0, 3]]`.
+    /// ## Conditions
+    /// - `self.rows() == 1`    
+    pub fn row_diagonal(&self) -> MatErr<Self> {
+        if self.row != 1 {
+            return Err(Dim)
         }
-        else if self.col == 1 {
-            Ok(Self::from_map((self.row, self.row),  |r, c| {
-                if c == r { 
-                    self[(c, 1)] 
-                } 
-                else { 
-                    T::zero() 
-                }
-            }))
-        }
-        else {
-            Err(MatErr::Dim)
-        } 
+
+        Ok(Self::from_map((self.col, self.col), |r, c| {
+            if c == r { 
+                self[(1, c)] 
+            } 
+            else {
+                T::zero()
+            }
+        }))
     }
 
+    /// Creates diagonal "identity" matrix filled by column values. Given
+    /// the input `[[1], [2], [3]]` it outputs `[[1, 0, 0], [0, 2, 0], [0, 0, 3]]`.
+    /// ## Conditions
+    /// - `self.col() == 1`   
+    pub fn col_diagonal(&self) -> MatErr<Self> {
+        if self.col != 1 {
+            return Err(Dim)
+        }
+
+        Ok(Self::from_map((self.col, self.col), |r, c| {
+            if c == r { 
+                self[(r, 1)] 
+            } 
+            else {
+                T::zero()
+            }
+        }))
+    }
+
+    /// Creates transpose matrix, rotated 90 degrees from the source matrix. Given
+    /// the input `[1, 2, 3]` it outputs `[[1], [2], [3]]`, inversing all rows and columns
     pub fn transpose(&self) -> Self {
         Self::from_map((self.col, self.row), |r, c| self[(c, r)])
     }
 
-    pub fn cofactor(&self) -> Result<Self, MatErr> {
+    /// Creates cofactor matrix, setting each element to minor and negating it
+    /// if its coordinate `(r, c)` doesn't satisfy `(r + c) % 2 != 0`.
+    /// ## Conditions
+    /// - `self.is_square()`
+    pub fn cofactor(&self) -> MatErr<Self> {
         if !self.is_square() {
-            return Err(MatErr::Sqr);
+            return Err(Sqr);
         }
 
         Ok(Self::from_map(self.dim(), |r, c| {
-            self.minor((r, c)).unwrap().determinant().unwrap()
+            self.minor((r, c)).unwrap()
                 * if (r + c) % 2 == 0 { T::one()} else { T::neg() }
         }))
     }
 
-    pub fn adjoint(&self) -> Result<Self, MatErr> {
-        Ok(self.cofactor()?.transpose())
-    }
-
-    pub fn inverse(&self) -> Result<Self, MatErr> {
+    /// Creates inverse matrix `A-1` from matrix `A` satisfying `A * A-1 = Identity`. 
+    /// ## Conditions
+    /// - `Self.determinant() != 0`
+    pub fn inverse(&self) -> MatErr<Self> {
         let det = self.determinant()?;
 
         if det == T::zero() {
-            return Err(MatErr::Inv)
+            return Err(Inv)
         }
         
-        Ok(self.adjoint()?.scaled(det.inv()))
+        Ok(self.cofactor()?.transpose().scaled(det.inv()))
     }
 
-    pub fn determinant(&self) -> Result<T, MatErr> {
+    /// Returns determinant, the the `n`-dimensional surface representating the 
+    /// transfomation of the matrix, where `n == row == col` 
+    /// ## Conditions
+    /// - `self.is_square()`
+    pub fn determinant(&self) -> MatErr<T> {
         if !self.is_square() {
-            return Err(MatErr::Sqr);
+            return Err(Sqr);
         }
 
         if self.col == 2 {
@@ -198,88 +224,123 @@ impl<T: Num> Mat<T> {
         }
 
         Ok((0..self.row).fold(T::zero(), |acc, i| {
-            self.minor((0, i)).unwrap().determinant().unwrap()
+            self.minor((0, i)).unwrap()
                 * self[(0, i)]
                 * if i % 2 == 0 { T::one() } else { T::neg() }
                 + acc
         }))
     }
 
-    pub fn minor(&self, (row, col): (usize, usize)) -> Result<Self, MatErr> {
+    /// Returns determinant of a minor matrix. Given the input `[[1, 2, 3], [4, 5, 6], [7, 8, 9]]`
+    /// the minor at `(1, 2)` would return the determinant of the matrix `[[1, 2], [7, 8]]`. 
+    /// ## Conditions
+    /// - `self.is_square()`
+    pub fn minor(&self, (row, col): (usize, usize)) -> MatErr<T> {
         if !self.is_square() {
-            return Err(MatErr::Sqr);
+            return Err(Sqr);
         }
 
-        Ok(Self::from_map((self.row - 1, self.col - 1), |r, c| {
+        Self::from_map((self.row - 1, self.col - 1), |r, c| {
             let ro = if r < row { 0 } else { 1 };
             let co = if c < col { 0 } else { 1 };
             self[(r + ro, c + co)]
-        }))
+        })
+        .determinant()
     }
 
-    pub fn to_index(&self, (row, col): (usize, usize)) -> usize {
-        self.col * row + col
-    }
-
-    pub fn to_coord(&self, index: usize) -> (usize, usize) {
-        (index / self.col, index % self.col)
-    }
-
+    /// Returns the dimensions `(row, col)`
     pub fn dim(&self) -> (usize, usize) {
         (self.row, self.col)
     }
 
+    /// Returns the row count
     pub fn rows(&self) -> usize {
         self.row
     }
-    
+
+    /// Returns the column count
     pub fn cols(&self) -> usize {
         self.col
     }
 
+    /// Returns whether `row == col`
     pub fn is_square(&self) -> bool {
         self.col == self.row
     }
 
+    /// Returns a shared reference to the matrix buffer
     pub fn buf(&self) -> &Vec<T> {
         &self.buf
     }
 
+    /// Returns a mutable reference to the matrix buffer
     pub fn buf_mut(&mut self) -> &mut Vec<T> {
         &mut self.buf
     }
-        
+    
+    /// Returns a shared buffer iterator, indexing in row by column order
+    pub fn iter(&self) -> Iter<'_, T> {
+        self.buf.iter()
+    }
+
+    /// Returns a mutable buffer iterator, indexing in row by column order
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
+        self.buf.iter_mut()
+    } 
+
+    /// Returns a shared rows iterator
+    pub fn iter_row(&self) -> Rows<'_, T> {
+        Rows::from(self)
+    }
+
+    /// Returns a shared columns iterator
+    pub fn iter_col(&self) -> Cols<'_, T> {
+        Cols::from(self)
+    }
+    
+    /// Returns the `row`th row
     pub fn row(&self, row: usize) -> Take<Skip<Iter<T>>> {
         self.buf.iter().skip(row * self.col).take(self.col)
     }
 
+    /// Returns the `col`nth column
     pub fn col(&self, col: usize) -> Take<StepBy<Skip<Iter<T>>>> {
         self.buf.iter().skip(col).step_by(self.col).take(self.row)
     }
 
-    pub fn add(&self, rhs: &Self) -> Result<Self, MatErr> {
-        if self.dim() != rhs.dim() {
-            return Err(MatErr::Add);
+    /// Returns the sum of two matrices
+    /// ## Conditions
+    /// - `self.dim() == other.dim()`
+    pub fn add(&self, other: &Self) -> MatErr<Self> {
+        if self.dim() != other.dim() {
+            return Err(Add);
         }
 
         Ok(Self::from_map(self.dim(), |r, c| {
-            self[(r, c)] + rhs[(r, c)]
+            self[(r, c)] + other[(r, c)]
         }))
     }
 
-    pub fn sub(&self, rhs: &Self) -> Result<Self, MatErr> {
-        if self.dim() != rhs.dim() {
-            return Err(MatErr::Add);
+    /// Returns the subtraction of two matrices
+    /// ## Conditions
+    /// - `self.dim() == other.dim()`
+    pub fn sub(&self, other: &Self) -> MatErr<Self> {
+        if self.dim() != other.dim() {
+            return Err(Add);
         }
 
         Ok(Self::from_map(self.dim(), |r, c| {
-            self[(r, c)] - rhs[(r, c)]
+            self[(r, c)] - other[(r, c)]
         }))
     }
 
-    pub fn mul(&self, rhs: &Self) -> Result<Self, MatErr> {
+    /// Returns the product of two matrices, returning a
+    /// matrix with dimensions `(self.rows(), other.cols())`
+    /// ## Conditions
+    /// - `self.cols() == other.rows()`
+    pub fn mul(&self, rhs: &Self) -> MatErr<Self> {
         if self.col != rhs.row {
-            return Err(MatErr::Mul);
+            return Err(Mul);
         }
 
         Ok(Self::from_map((self.row, rhs.col), |r, c| {
@@ -290,44 +351,31 @@ impl<T: Num> Mat<T> {
         }))
     }
 
+    /// Returns a matrix scaled by a factor of `scalar`
     pub fn scaled(&self, scalar: T) -> Self {
         Self::from_map(self.dim(), |r, c| scalar * self[(r, c)])
     }
+}
 
-    pub fn mapped<F>(&self, mut map: F) -> Self 
-    where
-        F: FnMut(T) -> T
-    {
-        Self::from_map(self.dim(), |r, c| map(self[(r, c)]))
+/// Iterator trait for collecting a matrix from an iterator
+pub trait MatCollect<T: Num> 
+where
+    Self: Iterator + IntoIterator<Item = T>,
+    Vec<T>: FromIterator<<Self as Iterator>::Item>
+{
+    fn collect_dim(&mut self, (row, col): (usize, usize)) -> MatErr<Mat<T>> {
+        let buf = self.into_iter().collect();       
+        Mat::<T>::from_vec((row, col), buf)
     }
 }
 
-impl<T: Num> Index<(usize, usize)> for Mat<T> {
-    type Output = T;
+impl<'m, T: Num, I> MatCollect<T> for I 
+where 
+    I: Iterator + IntoIterator<Item = T>,
+    Vec<T>: FromIterator<<Self as Iterator>::Item>
+{}
 
-    fn index(&self, (row, col): (usize, usize)) -> &Self::Output {
-        &self.buf[self.col * row + col]
-    }
-}
-
-impl<T: Num> IndexMut<(usize, usize)> for Mat<T> {
-    fn index_mut(&mut self, (row, col): (usize, usize)) -> &mut Self::Output {
-        &mut self.buf[self.col * row + col]
-    }
-}
-
-impl<T: Num> fmt::Display for Mat<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let buf = {
-            (0..self.row)
-                .map(|i| self.row(i))
-                .fold(String::new(), |acc, row| format!("{}\n{:?}", acc, row.copied().collect::<Vec<T>>()))
-        };
-        write!(f, "{}", buf)
-    }
-}
-
-/// Iterates Matrix rows by element
+/// Rows matrix iterator 
 pub struct Rows<'m, T: Num> {
     mat: &'m Mat<T>,
     i: usize,
@@ -355,6 +403,7 @@ impl<'m, T: Num> Iterator for Rows<'m, T> {
     }
 }
 
+/// Columns matrix iterator
 pub struct Cols<'m, T: Num> {
     mat: &'m Mat<T>,
     i: usize,
@@ -379,5 +428,30 @@ impl<'m, T: Num> Iterator for Cols<'m, T> {
 
         self.i += 1;    
         Some(self.mat.col(self.i - 1))
+    }
+}
+
+impl<T: Num> Index<(usize, usize)> for Mat<T> {
+    type Output = T;
+
+    fn index(&self, (row, col): (usize, usize)) -> &Self::Output {
+        &self.buf[self.col * row + col]
+    }
+}
+
+impl<T: Num> IndexMut<(usize, usize)> for Mat<T> {
+    fn index_mut(&mut self, (row, col): (usize, usize)) -> &mut Self::Output {
+        &mut self.buf[self.col * row + col]
+    }
+}
+
+impl<T: Num> fmt::Display for Mat<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let buf = {
+            (0..self.row)
+                .map(|i| self.row(i))
+                .fold(String::new(), |acc, row| format!("{}\n{:?}", acc, row.copied().collect::<Vec<T>>()))
+        };
+        write!(f, "{}", buf)
     }
 }

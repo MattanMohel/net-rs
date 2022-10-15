@@ -1,4 +1,5 @@
 use crate::mat::MatErr;
+use crate::mat::MatErrType;
 
 use super::act::Act;
 use super::cost::Cost;
@@ -62,11 +63,11 @@ impl<const L: usize> Net<L> {
             .iter()
             .zip(self.biases.iter())
             .fold(input.clone(), |acc, (w, b)| {
-                w.mul(&acc).unwrap().add(&b).unwrap().mapped(|e| self.act.act(e))
+                w.mul(&acc).unwrap().add(&b).unwrap().iter().map(|e| self.act.act(e)).collect()
             }))
     }
 
-    pub fn train(&mut self, input: Mat, expected: Mat) -> Result<(), MatErr> {
+    pub fn train(&mut self, input: Mat, expected: Mat) -> MatErr {
         let mut acts = vec![input];
         let mut sums = Vec::new();
 
@@ -84,26 +85,26 @@ impl<const L: usize> Net<L> {
             self.cost.d_cost(n, expected[(i - 1, 0)])
         });
 
-        let mut err = sums[self.len()].as_identity()?.mul(&d_cost)?;
+        let mut err = sums[self.len()].col_diagonal()?.mul(&d_cost)?;
         
         let mut d_ws = Vec::new();
         let mut errs = Vec::new();
 
         for i in (0..self.len()).rev() {
-            let act = acts[i].transpose().as_row(2)?;
-            let d_w = err.as_identity()?.mul(&act)?;
+            // let act = acts[i].transpose().as_row(2)?;
+            // let d_w = err.col_diagonal()?.mul(&act)?;
 
-            d_ws.push(d_w);
-            errs.push(err.clone());
+            // d_ws.push(d_w);
+            // errs.push(err.clone());
 
-            if i == 0 {
-                break
-            } 
+            // if i == 0 {
+            //     break
+            // } 
 
-            let d_prev_sum = sums[i-1].mapped(|e| self.act.d_act(e)).as_identity()?;
-            let weight_err = self.weights[i].transpose().mul(&err)?;
+            // let d_prev_sum = sums[i-1].mapped(|e| self.act.d_act(e)).col_diagonal()?;
+            // let weight_err = self.weights[i].transpose().mul(&err)?;
 
-            err = d_prev_sum.mul(&weight_err)?;
+            // err = d_prev_sum.mul(&weight_err)?;
         }
 
         for i in (0..self.len()).rev() {
