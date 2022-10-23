@@ -24,27 +24,26 @@ pub struct Net<const L: usize> {
 }
 
 impl<const L: usize> Net<L> {
-    pub fn new(form: [usize; L]) -> Result<Self, ()> {
+    pub fn new(form: [usize; L]) -> MatErr<Self> {
         if form.len() <= 2 {
-            return Err(())
+            return Err(MatErrType::Unimplemented)
         }
 
         Ok(Self { 
-            act: Act::Sig,
+            act:  Act::Sig,
             cost: Cost::Quad,
 
             batch_size: 64,
             learn_rate: 0.01,
 
-            biases: Self::new_biases(&form),
+            biases:  Self::new_biases(&form),
             weights: Self::new_weights(&form),
             form
         })
     }
 
     pub fn new_weights(form: &[usize; L]) -> Vec<Mat> {
-        (0..form.len() - 1)
-            .map(|i| {
+        (0..form.len() - 1).map(|i| {
                 let l1 = form[i];
                 let l2 = form[i+1];
                 Mat::random((l2, l1), N::neg(), N::one()).scaled(l1 as N)
@@ -53,8 +52,7 @@ impl<const L: usize> Net<L> {
     }
 
     pub fn new_biases(form: &[usize; L]) -> Vec<Mat> {
-        (0..form.len() - 1)
-            .map(|i| {
+        (0..form.len() - 1).map(|i| {
                 let l2 = form[i+1];
                 Mat::zeros((l2, 1))
             })
@@ -65,9 +63,21 @@ impl<const L: usize> Net<L> {
         L - 1
     }
 
-    pub fn forward_prop(&self, input: &Mat) -> Result<Mat, ()> {
+    fn act(&self, n: N) -> N {
+        self.act.act(n)
+    }
+
+    fn d_act(&self, n: N) -> N {
+        self.act.act(n)
+    }
+
+    fn d_cost(&self, n: N, exp: N) -> N {
+        self.cost.d_cost(n, exp)
+    }
+
+    pub fn forward_prop(&self, input: &Mat) -> MatErr<Mat> {
         if input.rows() != self.form[0] {
-            return Err(())
+            return Err(MatErrType::Unimplemented)
         }
 
         Ok(self.weights
@@ -81,64 +91,63 @@ impl<const L: usize> Net<L> {
                     .unwrap()
                     .iter()
                     .map(|e| self.act.act(*e))
-                    .to_matrix((w.rows(), 1))
+                    .into_mat((w.rows(), 1))
                     .unwrap()
             }))
     }
 
-    pub fn train(&mut self, input: Mat, exp: Mat) -> MatErr {
-        let mut acts = vec![input];
+    pub fn train(&mut self, input: &Mat, exp: &Mat) -> MatErr {
+        // list of resultant activations
+        let mut acts = vec![input.clone()];
+        // list of linear summations
         let mut sums = Vec::new();
 
+        // compute forward propagation 
         for i in 0..self.len() {
             let sum = self.weights[i].mul(&acts[i])?.add(&self.biases[i])?;
-            let act = sum.mapped(|elem| self.act.act(elem));
+            let act = sum.mapped(|e| self.act.act(e));
 
             sums.push(sum);
             acts.push(act);
         }
 
-        let gradient = acts[self.len()].iter().zip(exp.iter())
-            .map(|(a, e)| self.cost.d_cost(*a, *e))
-            .to_matrix(exp.dim())?;
+        // activation of layer L
+        let a = &acts[self.len()];
+        // linear summation of layer L
+        let z = &sums[self.len() - 1];  
+        // matrix of cost derivatives
+        let d_c = a.mapped_idx(|r, _| self.d_cost(a[(r, 0)], exp[(r, 0)]));
+        // matrix of activation derivatives
+        let d_z = z.mapped_idx(|r, _| self.d_act(z[(r, 0)]));
 
-        let mut err = sums[self.len()]
-            .hadamard(&gradient)?
-            .col_diagonal()?;
-        
+        println!("diag: {}", d_z.col_diagonal()?);
+        // calculated error of layer L
+        let err = d_z.col_diagonal()?.mul(&d_c)?;
+
+        // list of weight derivatives
         let mut d_ws = Vec::new();
-        let mut errs: Vec<Mat> = Vec::new();
+        // list of summation derivatives
+        let mut d_zs = vec![d_z];
+        // list of layer errors
+        let mut errs = vec![err];
 
+        // approximately...
         for i in (0..self.len()).rev() {
-            let l2 = self.form[i];
-            let l1 = self.form[i-1];
-
-
-            // TODO: implement from_cols/from_rows and use here
-            for j in 0..l2 {
-                acts[i-1].scaled(err[(j, 0)]);
+            let err_l = &errs[self.len() - i];
+            let d_w = self.weights[i].mapped_idx(|r, c| acts[i][(0, c)] * err_l[(r, 0)]);
+            
+            d_ws.push(d_w);
+            
+            if i == 1 {
+                break
             }
+            
+            let d_z = sums[i - 1].mapped(|n| self.d_act(n)).col_diagonal()?;
+            let w_t = self.weights[i].transpose();
+            let err = d_z.mul(&w_t)?.mul(err_l)?;
 
-            let d_w = Mat::from_map((self.form[i], self.form[i-1]), |r, c| {
-                errs[i][(r, 0)] * acts[i-1][(r, c)]
-            });
-
-            let d_b = &errs[i];
-
-            // let act = acts[i].transpose().as_row(2)?;
-            // let d_w = err.col_diagonal()?.mul(&act)?;
-
-            // d_ws.push(d_w);
-            // errs.push(err.clone());
-
-            // if i == 0 {
-            //     break
-            // } 
-
-            // let d_prev_sum = sums[i-1].mapped(|e| self.act.d_act(e)).col_diagonal()?;
-            // let weight_err = self.weights[i].transpose().mul(&err)?;
-
-            // err = d_prev_sum.mul(&weight_err)?;
+            d_zs.push(d_z);
+            errs.push(err);            
         }
 
         for i in (0..self.len()).rev() {
