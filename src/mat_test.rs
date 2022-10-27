@@ -8,6 +8,21 @@ type Coord = (usize, usize);
 /// type representing a matrix slice's index transformation
 type Trans = fn(Coord, Dim) -> Coord;
 
+/// NOTE!!!\
+/// its impossible to have an 'impl T' return in a 
+/// trait body so this system has to be reworked
+/// 
+/// Rather, Matrix will be a single type (with no trait implementations)
+/// 
+/// To create a regular Matrix, `Matrix<T, Vec<T>>` will be used
+/// 
+/// Top create a slice, `Matrix<T, &Vec<T>>` will be used
+/// 
+/// To get element from a matrix the same concept of 'indexing through a closure' will 
+/// be used with the same concept of closure composition. On the other hand, since there 
+/// will be no traits, the closures will actually be initializable using 'return impl Closure' notation
+
+
 pub trait MatrixType<T: Num> 
 where
     Self: Index<Coord, Output=T>
@@ -16,7 +31,12 @@ where
     fn row(&self) -> usize;
     fn col(&self) -> usize;
     fn buf(&self) -> &Vec<T>;
-    fn slice(&self, dim: Dim, f: Trans) -> MatrixSlice<'_, T>;
+
+    
+    fn slice<F>(&self, dim: Dim, trans: F) -> MatrixSlice<'_, T, F>
+    where 
+        F: Fn((Coord, Dim)) -> (Coord, Dim);
+
 
     fn is_square(&self) -> bool {
         self.row() == self.col()
@@ -26,9 +46,19 @@ where
         self.col() * r + c
     }
 
-    fn transpose(&self) -> MatrixSlice<'_, T> {
-        self.slice((self.col(), self.row()), |(i, j), _| (j, i))
-    }
+    // fn row_slice<F>(&self, r: usize) -> MatrixSlice<'_, T, F> 
+    // where
+    //     F: Fn((Coord, Dim)) -> (Coord, Dim)
+    // {
+    //     self.slice((1, self.col()), |(i, j), _| (i, j))
+    // }
+
+    // fn transpose<F>(&self) -> MatrixSlice<'_, T, F> 
+    // where
+    //     F: Fn((Coord, Dim)) -> (Coord, Dim)    
+    // {
+    //     self.slice((self.col(), self.row()), |(i, j), _| (j, i))
+    // }
 
     fn add(&self, other: &Self) -> Matrix<T> {
         if self.dim() != other.dim() {
@@ -76,13 +106,15 @@ impl<T: Num> MatrixType<T> for Matrix<T> {
         &self.buf
     }
 
-    fn slice(&self, (row, col): Dim, f: Trans) -> MatrixSlice<'_, T> {
+    fn slice<F>(&self, (row, col): Dim, trans: F) -> MatrixSlice<'_, T, F> 
+    where
+        F: Fn((Coord, Dim)) -> (Coord, Dim)
+    {
         MatrixSlice { 
             buf: self.buf(), 
             row: row, 
             col: col, 
-            comp: vec![f],
-            dims: vec![(row, col)]
+            comp: trans
         }
     }
 }
@@ -153,15 +185,52 @@ impl<T: Num> Matrix<T> {
     }
 }
 
-pub struct MatrixSlice<'src, T: Num> {
+pub struct MatrixSlice<'src, T, F> 
+where
+    T: Num,
+    F: Fn((Coord, Dim)) -> (Dim, Coord)
+{
     buf: &'src Vec<T>,
     row: usize,
     col: usize,
-    comp: Vec<Trans>,
-    dims: Vec<Dim>
+    comp: F,
 }
 
-impl<'src, T: Num> MatrixType<T> for MatrixSlice<'src, T> {
+impl<'src, T, F> MatrixSlice<'src, T, F> 
+where
+    T: Num,
+    F: Fn((Coord, Dim)) -> (Coord, Dim)
+{
+    fn test(&self, (row, col): Dim, f: F) -> MatrixSlice<'_, T, impl Fn((Coord, Dim)) -> (Coord, Dim)> {
+        MatrixSlice { 
+            buf: &self.buf, 
+            row: 0, 
+            col: 0, 
+            comp: f
+        }
+    }
+
+    
+    fn s<G>(&self, (row, col): Dim, f: G) -> MatrixSlice<'_, T, impl Fn((Coord, Dim)) -> (Coord, Dim)>
+    where
+        G: Fn((Coord, Dim)) -> (Coord, Dim)
+    {
+        // let f = |i: (Coord, Dim)| (self.comp)(i);
+
+        MatrixSlice { 
+            buf: self.buf(), 
+            row: row, 
+            col: col,
+            comp: |((i, j), (r, c))| ((i, j), (r, c))
+        }
+    }
+}
+
+impl<'src, T, F> MatrixType<T> for MatrixSlice<'src, T, F> 
+where
+    T: Num,
+    F: Fn((Coord, Dim)) -> (Dim, Coord)
+{
     fn dim(&self) -> Dim {
         (self.row, self.col)
     }
@@ -178,33 +247,39 @@ impl<'src, T: Num> MatrixType<T> for MatrixSlice<'src, T> {
         &self.buf
     }
 
-    fn slice(&self, (row, col): Dim, f: Trans) -> MatrixSlice<'_, T> {
-        let mut comp = self.comp.clone();
-        comp.push(f);
+    fn slice<G>(&self, (row, col): Dim, f: G) -> MatrixSlice<'_, T, G>
+    where
+        G: Fn((Coord, Dim)) -> (Coord, Dim)
+    {
+        // let f = |i: (Coord, Dim)| (self.comp)(i);
 
-        let mut dims = self.dims.clone();
-        dims.push((row, col));
+        // MatrixSlice { 
+        //     buf: self.buf(), 
+        //     row: row, 
+        //     col: col,
+        //     comp: |((i, j), (r, c))| ((i, j), (r, c))
+        // }
 
-        MatrixSlice { 
-            buf: self.buf(), 
-            row: row, 
-            col: col,
-            comp,
-            dims
-        }
+        todo!()
     }
 }
 
-impl<'src, T: Num> Index<Coord> for MatrixSlice<'src, T> {
+impl<'src, T, F> Index<Coord> for MatrixSlice<'src, T, F>
+where
+    T: Num,
+    F: Fn((Coord, Dim)) -> (Coord, Dim)  
+{
     type Output=T;
 
     fn index(&self, coord: Coord) -> &Self::Output {
-        let trans = 
-            self.comp
-                .iter()
-                .zip(self.dims.iter())
-                .fold(coord, |a, (trans, dim)| trans(a, *dim));
+        // let trans = 
+        //     self.comp
+        //         .iter()
+        //         .zip(self.dims.iter())
+        //         .fold(coord, |a, (trans, dim)| trans(a, *dim));
 
-        &self.buf[self.to_index(trans)]
+        // &self.buf[self.to_index(trans)]
+
+        todo!()
     }
 }
