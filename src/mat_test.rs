@@ -11,7 +11,12 @@ where
     fn row(&self) -> usize;
     fn col(&self) -> usize;
     fn buf(&self) -> &Vec<T>;
-    
+    fn buf_stride(&self) -> usize;
+
+    fn to_index(&self, (r, c): Dim) -> usize {
+        self.buf_stride() * r + c
+    }
+
     fn dim(&self) -> Dim {
         (self.row(), self.col())
     }
@@ -24,21 +29,24 @@ where
         self.row() == self.col()
     }
 
-    fn to_index(&self, (r, c): Dim) -> usize {
-        self.col() * r + c
-    }
-
     fn iter(&self) -> MatrixIterator<'_, T, Self> {
         MatrixIterator::new(self)
     }
     
     fn add(&self, other: &Self) -> Matrix<T> {
-        todo!()
+        if self.dim() != other.dim() {
+            panic!()
+        }
+
+        Matrix::from_map(self.dim(), |pos| self[pos] + other[pos])
     }
 
     fn sub(&self, other: &Self) -> Matrix<T> {
-        todo!()
-    }
+        if self.dim() != other.dim() {
+            panic!()
+        }
+
+        Matrix::from_map(self.dim(), |pos| self[pos] - other[pos])    }
 }
 
 pub struct Matrix<T: Num> {
@@ -75,15 +83,43 @@ impl<T: Num> Matrix<T> {
         }
     }
 
-    pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, T, F> 
+    pub fn from_map<F>((row, col): Dim, map: F) -> Self 
+    where
+        F: Fn(Dim) -> T
+    {
+        let buf = 
+            (0..row*col)
+                .map(|i| map((i/col, i%col)))
+                .collect();
+
+        Self {
+            buf,
+            row,
+            col
+        }
+    }
+
+    pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> 
     where
         F: Fn(Dim) -> Dim
     {
-        MatrixSlice::new(&self.buf, dim, map)
+        MatrixSlice::new(self, dim, map)
+    }
+
+    pub fn rows(&self, beg: usize, num: usize, stride: usize) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
+        self.slice((num, self.col), move |(i, j)| (beg + i*stride, j))
+    }
+
+    pub fn cols(&self, beg: usize, num: usize, stride: usize) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
+        self.slice((num, self.row), move |(i, j)| (j, beg + i*stride))
+    }
+
+    pub fn transposed(&self) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
+        self.slice(self.dim_inv(), |(r, c)| (c, r))
     }
 
     pub fn transpose(&self) -> Self {
-        self.slice((self.col, self.row), |(r, c)| (c, r)).to_matrix()
+        self.slice(self.dim_inv(), |(r, c)| (c, r)).to_matrix()
     }
 }
 
@@ -98,6 +134,10 @@ impl<T: Num> MatrixType<T> for Matrix<T> {
 
     fn buf(&self) -> &Vec<T> {
         &self.buf
+    }
+
+    fn buf_stride(&self) -> usize {
+        self.col
     }
 }
 
@@ -122,7 +162,7 @@ where
     T: Num,
     F: Fn(Dim) -> Dim 
 {
-    buf: &'a Vec<T>,
+    mat: &'a Matrix<T>,
     row: usize,
     col: usize,
     map: F,
@@ -142,7 +182,11 @@ where
     }
 
     fn buf(&self) -> &Vec<T> {
-        &self.buf
+        &self.mat.buf
+    }
+
+    fn buf_stride(&self) -> usize {
+        self.mat.col
     }
 }
 
@@ -151,9 +195,13 @@ where
     T: Num,
     F: Fn(Dim) -> Dim 
 {
-    pub fn new(buf: &'a Vec<T>, (row, col): Dim, map: F) -> Self {
-        Self { 
-            buf, 
+    fn to_index(&self, (r, c): Dim) -> usize {
+        self.mat.col() * r + c
+    }
+
+    pub fn new(mat: &'a Matrix<T>, (row, col): Dim, map: F) -> MatrixSlice<'a, T, impl Fn(Dim) -> Dim> {
+        MatrixSlice { 
+            mat, 
             row, 
             col, 
             map
@@ -178,7 +226,7 @@ where
     type Output=T;
 
     fn index(&self, i: Dim) -> &Self::Output {
-        &self.buf[self.to_index((self.map)(i))]
+        &self.mat[self.to_index((self.map)(i))]
     }
 }
 
@@ -190,7 +238,7 @@ where
     type Output=T;
 
     fn index(&self, i: usize) -> &Self::Output {
-        &self.buf[self.to_index((self.map)((i / self.col, i % self.col)))]
+        &self.mat[self.to_index((self.map)((i/self.col, i%self.col)))]
     }
 }
 
