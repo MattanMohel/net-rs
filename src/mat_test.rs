@@ -1,4 +1,6 @@
 use std::{ops::Index, marker::PhantomData};
+use rand::{distributions::Standard, prelude::Distribution, Rng};
+
 use super::num::*;
 
 /// type representing matrix dimensions
@@ -11,10 +13,10 @@ where
     fn row(&self) -> usize;
     fn col(&self) -> usize;
     fn buf(&self) -> &Vec<T>;
-    fn buf_stride(&self) -> usize;
+    fn stride(&self) -> usize;
 
     fn to_index(&self, (r, c): Dim) -> usize {
-        self.buf_stride() * r + c
+        self.stride() * r + c
     }
 
     fn dim(&self) -> Dim {
@@ -28,6 +30,75 @@ where
     fn is_square(&self) -> bool {
         self.row() == self.col()
     }
+ 
+    fn diagonal(&self) -> Matrix<T> {
+        if self.col() > 1 {
+            panic!()
+        }
+
+        Matrix::from_map((self.row(), self.row()), |(r, c)| {
+            if c == r { 
+                self[(r, 0)] 
+            } 
+            else {
+                T::zero()
+            }
+        })
+    }
+
+    fn cofactor(&self) -> Matrix<T> {
+        if !self.is_square() {
+            panic!("cofactor of non-square matrix")
+        }
+
+        Matrix::from_map(self.dim(), |(r, c)| {
+            self.minor((r, c))
+                * if (r + c) % 2 == 0 { T::one()} else { -T::one() }
+        })
+    }
+
+    fn inverse(&self) -> Matrix<T> {
+        let det = self.determinant();
+
+        if det == T::zero() {
+            panic!("inverse of 0 determinant matrix")
+        }
+        
+        self
+            .cofactor()
+            .transpose()
+            .scale(T::one() / det)
+    }
+
+    fn determinant(&self) -> T {
+        if !self.is_square() {
+            panic!("determinant of non-square matrix")
+        }
+
+        if self.col() == 2 {
+            return self[(0, 0)] * self[(1, 1)] - self[(0, 1)] * self[(1, 0)];
+        }
+
+        (0..self.row()).fold(T::zero(), |acc, i| {
+            self.minor((0, i))
+                * self[(0, i)]
+                * if i % 2 == 0 { T::one() } else { -T::one() }
+                + acc
+        })
+    }
+
+    fn minor(&self, (row, col): (usize, usize)) -> T {
+        if !self.is_square() {
+            panic!("minor of non-square matrix")
+        }
+
+        Matrix::from_map((self.row()-1, self.col()-1), |(r, c)| {
+            let ro = if r < row { 0 } else { 1 };
+            let co = if c < col { 0 } else { 1 };
+            self[(r + ro, c + co)]
+        })
+        .determinant()
+    }
 
     fn iter(&self) -> MatrixIterator<'_, T, Self> {
         MatrixIterator::new(self)
@@ -35,7 +106,7 @@ where
     
     fn add(&self, other: &Self) -> Matrix<T> {
         if self.dim() != other.dim() {
-            panic!()
+            panic!("addition error")
         }
 
         Matrix::from_map(self.dim(), |pos| self[pos] + other[pos])
@@ -43,10 +114,28 @@ where
 
     fn sub(&self, other: &Self) -> Matrix<T> {
         if self.dim() != other.dim() {
-            panic!()
+            panic!("subtraction error")
         }
 
-        Matrix::from_map(self.dim(), |pos| self[pos] - other[pos])    }
+        Matrix::from_map(self.dim(), |pos| self[pos] - other[pos])    
+    }
+
+    fn mul(&self, other: &Self) -> Matrix<T> {
+        if self.col() != other.row() {
+            panic!("multipication error")
+        }
+
+        let mut buf = Vec::with_capacity(self.row()*other.col());
+
+        for row in 0..self.row() {
+            for col in 0..other.col() {
+                let acc = (0..self.stride()).fold(T::zero(), |acc, i| acc + self[(row, i)] * other[(i, col)]);
+                buf.push(acc);
+            }
+        }
+
+        Matrix::from_buf((self.row(), other.col()), buf)
+    }
 }
 
 pub struct Matrix<T: Num> {
@@ -83,9 +172,9 @@ impl<T: Num> Matrix<T> {
         }
     }
 
-    pub fn from_map<F>((row, col): Dim, map: F) -> Self 
+    pub fn from_map<F>((row, col): Dim, mut map: F) -> Self 
     where
-        F: Fn(Dim) -> T
+        F: FnMut(Dim) -> T
     {
         let buf = 
             (0..row*col)
@@ -98,6 +187,42 @@ impl<T: Num> Matrix<T> {
             col
         }
     }
+
+    pub fn identity(len: usize) -> Self {
+        Self::from_map((len, len), |(r, c)| {
+            if c == r { 
+                T::one() 
+            } 
+            else { 
+                T::zero() 
+            }
+        })
+    }
+    
+    pub fn fill((row, col): (usize, usize), fill: T) -> Self {
+        Self::from_map((row, col), |_| fill)
+    }
+
+    pub fn zeros((row, col): (usize, usize)) -> Self {
+        Self::from_map((row, col), |_| T::zero())
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            buf: Vec::new(),
+            col: 0,
+            row: 0,
+        }
+    }
+
+    pub fn random((row, col): (usize, usize), min: T, max: T) -> Self 
+    where 
+        Standard: Distribution<T>
+    {
+        let mut rng = rand::thread_rng();
+        Self::from_map((row, col), |_| rng.gen() * (max - min) + min)
+    }
+
 
     pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> 
     where
@@ -121,6 +246,10 @@ impl<T: Num> Matrix<T> {
     pub fn transpose(&self) -> Self {
         self.slice(self.dim_inv(), |(r, c)| (c, r)).to_matrix()
     }
+
+    pub fn scale(&self, scalar: T) -> Self {
+        Self::from_map(self.dim(), |(r, c)| scalar * self[(r, c)])
+    }
 }
 
 impl<T: Num> MatrixType<T> for Matrix<T> {
@@ -136,7 +265,7 @@ impl<T: Num> MatrixType<T> for Matrix<T> {
         &self.buf
     }
 
-    fn buf_stride(&self) -> usize {
+    fn stride(&self) -> usize {
         self.col
     }
 }
@@ -185,7 +314,7 @@ where
         &self.mat.buf
     }
 
-    fn buf_stride(&self) -> usize {
+    fn stride(&self) -> usize {
         self.mat.col
     }
 }
