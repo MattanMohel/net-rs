@@ -45,6 +45,23 @@ where
             }
         })
     }
+   
+    fn determinant(&self) -> T {
+        if !self.is_square() {
+            panic!("determinant of non-square matrix")
+        }
+
+        if self.col() == 2 {
+            return self[(0, 0)] * self[(1, 1)] - self[(0, 1)] * self[(1, 0)];
+        }
+
+        (0..self.row()).fold(T::zero(), |acc, i| {
+            self.minor((0, i))
+                * self[(0, i)]
+                * if i % 2 == 0 { T::one() } else { -T::one() }
+                + acc
+        })
+    }
 
     fn cofactor(&self) -> Matrix<T> {
         if !self.is_square() {
@@ -68,23 +85,6 @@ where
             .cofactor()
             .transpose()
             .scale(T::one() / det)
-    }
-
-    fn determinant(&self) -> T {
-        if !self.is_square() {
-            panic!("determinant of non-square matrix")
-        }
-
-        if self.col() == 2 {
-            return self[(0, 0)] * self[(1, 1)] - self[(0, 1)] * self[(1, 0)];
-        }
-
-        (0..self.row()).fold(T::zero(), |acc, i| {
-            self.minor((0, i))
-                * self[(0, i)]
-                * if i % 2 == 0 { T::one() } else { -T::one() }
-                + acc
-        })
     }
 
     fn minor(&self, (row, col): (usize, usize)) -> T {
