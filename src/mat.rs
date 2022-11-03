@@ -10,27 +10,35 @@ pub trait MatrixType<T: Num>
 where
     Self: Index<Dim, Output=T> + Index<usize, Output=T> + Sized
 {
+    /// Returns the number of rows
     fn row(&self) -> usize;
+    /// Returns the number of columns
     fn col(&self) -> usize;
+    /// Returns a reference to the buffer
     fn buf(&self) -> &Vec<T>;
+    /// Returns the row stride 
     fn stride(&self) -> usize;
-
+    
+    /// Returns the dimensions (row, col)
+    fn dim(&self) -> Dim {
+        (self.row(), self.col())
+    }
+   
+    /// Returns the inverse dimensions (col, row)
+    fn dim_inv(&self) -> Dim {
+        (self.col(), self.row())
+    }
+    
+    /// Returns wether col == row
+    fn is_square(&self) -> bool {
+        self.row() == self.col()
+    }
+    
+    /// Converts an (x, y) coordinate into a buffer index
     fn to_index(&self, (r, c): Dim) -> usize {
         self.stride() * r + c
     }
 
-    fn dim(&self) -> Dim {
-        (self.row(), self.col())
-    }
-
-    fn dim_inv(&self) -> Dim {
-        (self.col(), self.row())
-    }
-
-    fn is_square(&self) -> bool {
-        self.row() == self.col()
-    }
- 
     fn diagonal(&self) -> Matrix<T> {
         if self.col() > 1 {
             panic!()
@@ -45,7 +53,8 @@ where
             }
         })
     }
-   
+    
+    /// Returns the determinant of a square matrix
     fn determinant(&self) -> T {
         if !self.is_square() {
             panic!("determinant of non-square matrix")
@@ -62,7 +71,22 @@ where
                 + acc
         })
     }
+    
+    /// Returns the minor of a given matrix element
+    fn minor(&self, (row, col): (usize, usize)) -> T {
+        if !self.is_square() {
+            panic!("minor of non-square matrix")
+        }
 
+        Matrix::from_map((self.row()-1, self.col()-1), |(r, c)| {
+            let ro = if r < row { 0 } else { 1 };
+            let co = if c < col { 0 } else { 1 };
+            self[(r + ro, c + co)]
+        })
+        .determinant()
+    }
+    
+    /// Returns the cofactor a square matrix
     fn cofactor(&self) -> Matrix<T> {
         if !self.is_square() {
             panic!("cofactor of non-square matrix")
@@ -73,7 +97,8 @@ where
                 * if (r + c) % 2 == 0 { T::one()} else { -T::one() }
         })
     }
-
+    
+    /// Returns the inverse of a square matrix
     fn inverse(&self) -> Matrix<T> {
         let det = self.determinant();
 
@@ -87,21 +112,34 @@ where
             .scale(T::one() / det)
     }
 
-    fn minor(&self, (row, col): (usize, usize)) -> T {
-        if !self.is_square() {
-            panic!("minor of non-square matrix")
-        }
-
-        Matrix::from_map((self.row()-1, self.col()-1), |(r, c)| {
-            let ro = if r < row { 0 } else { 1 };
-            let co = if c < col { 0 } else { 1 };
-            self[(r + ro, c + co)]
-        })
-        .determinant()
+    fn iter(&self) -> MatrixIter<'_, T, Self> {
+        MatrixIter::new(self)
     }
 
-    fn iter(&self) -> MatrixIterator<'_, T, Self> {
-        MatrixIterator::new(self)
+    fn map<F>(&self, f: F) -> Matrix<T>
+    where
+        F: Fn(T) -> T
+    {
+        let buf = 
+            self
+                .iter()
+                .map(|i| f(i))
+                .collect();
+
+        Matrix::from_buf(self.dim(), buf)
+    }
+
+    fn scale<F>(&self, scalar: T) -> Matrix<T>
+    where
+        F: Fn(T) -> T
+    {
+        let buf = 
+            self
+                .iter()
+                .map(|i| scalar * i)
+                .collect();
+
+        Matrix::from_buf(self.dim(), buf)
     }
     
     fn add(&self, other: &Self) -> Matrix<T> {
@@ -138,6 +176,7 @@ where
     }
 }
 
+#[derive(Clone)]
 pub struct Matrix<T: Num> {
     buf: Vec<T>,
     row: usize,
@@ -223,7 +262,6 @@ impl<T: Num> Matrix<T> {
         Self::from_map((row, col), |_| rng.gen() * (max - min) + min)
     }
 
-
     pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> 
     where
         F: Fn(Dim) -> Dim
@@ -249,6 +287,26 @@ impl<T: Num> Matrix<T> {
 
     pub fn scale(&self, scalar: T) -> Self {
         Self::from_map(self.dim(), |(r, c)| scalar * self[(r, c)])
+    }
+
+    pub fn add_eq<M: MatrixType<T>>(&mut self, other: &M) {
+        if self.dim() != other.dim() {
+            panic!("addition error")
+        }
+
+        for (i, n) in self.buf.iter_mut().enumerate() {
+            *n += other[i]
+        }
+    }
+
+    pub fn sub_eq<M: MatrixType<T>>(&mut self, other: &M) {
+        if self.dim() != other.dim() {
+            panic!("addition error")
+        }
+
+        for (i, n) in self.buf.iter_mut().enumerate() {
+            *n -= other[i]
+        }
     }
 }
 
@@ -367,11 +425,12 @@ where
     type Output=T;
 
     fn index(&self, i: usize) -> &Self::Output {
-        &self.mat[self.to_index((self.map)((i/self.col, i%self.col)))]
+        let i = (self.map)((i/self.col, i%self.col));
+        &self.mat[self.to_index(i)]
     }
 }
 
-pub struct MatrixIterator<'a, T, M> 
+pub struct MatrixIter<'a, T, M> 
 where
     T: Num,
     M: MatrixType<T>
@@ -381,7 +440,7 @@ where
     _t: PhantomData<T>
 }
 
-impl<'a, T, M> MatrixIterator<'a, T, M> 
+impl<'a, T, M> MatrixIter<'a, T, M> 
 where
     T: Num,
     M: MatrixType<T>
@@ -395,7 +454,7 @@ where
     }
 }
 
-impl<'a, T, M> Iterator for MatrixIterator<'a, T, M> 
+impl<'a, T, M> Iterator for MatrixIter<'a, T, M> 
 where
     T: Num,
     M: MatrixType<T>
