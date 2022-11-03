@@ -144,7 +144,7 @@ where
     
     fn add(&self, other: &Self) -> Matrix<T> {
         if self.dim() != other.dim() {
-            panic!("addition error")
+            panic!("addition error, {:?} by {:?}", self.dim(), other.dim())
         }
 
         Matrix::from_map(self.dim(), |pos| self[pos] + other[pos])
@@ -152,7 +152,7 @@ where
 
     fn sub(&self, other: &Self) -> Matrix<T> {
         if self.dim() != other.dim() {
-            panic!("subtraction error")
+            panic!("subtraction error, {:?} by {:?}", self.dim(), other.dim())
         }
 
         Matrix::from_map(self.dim(), |pos| self[pos] - other[pos])    
@@ -160,19 +160,26 @@ where
 
     fn mul(&self, other: &Self) -> Matrix<T> {
         if self.col() != other.row() {
-            panic!("multipication error")
+            panic!("multipication error, {:?} by {:?}", self.dim(), other.dim())
         }
 
         let mut buf = Vec::with_capacity(self.row()*other.col());
 
         for row in 0..self.row() {
             for col in 0..other.col() {
-                let acc = (0..self.stride()).fold(T::zero(), |acc, i| acc + self[(row, i)] * other[(i, col)]);
+                let acc = (0..self.stride()).fold(T::zero(), |acc, i| {
+                    acc + self[(row, i)] * other[(i, col)]
+                });
                 buf.push(acc);
             }
         }
 
         Matrix::from_buf((self.row(), other.col()), buf)
+    }
+
+    fn debug(&self) -> &Self {
+        println!("{:?}", self.dim());
+        self
     }
 }
 

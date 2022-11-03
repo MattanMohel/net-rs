@@ -90,13 +90,13 @@ impl<const L: usize> Net<L> {
     }
 
     pub fn train(&mut self, input: &Matrix<N>, expected: &Matrix<N>) {
-        let mut sums = Vec::with_capacity(self.layers());
-        let mut activations = Vec::with_capacity(self.layers());
-        let mut errors = Vec::with_capacity(self.layers());
+        let mut sums = Vec::with_capacity(L-1);
+        let mut activations = Vec::with_capacity(L-1);
+        let mut errors = Vec::with_capacity(L-1);
 
         activations.push(input.clone());
 
-        for i in 0..self.layers() {
+        for i in 0..L-1 {
             let sum_l = self.weights[i].mul(&activations[i]).add(&self.biases[i]);
             let activation_l = sum_l.map(|n| self.activate(n));
 
@@ -106,39 +106,36 @@ impl<const L: usize> Net<L> {
 
         // TODO: generalize error method with enum
         let error = 
-            sums[self.layers()-1]
+            sums[L-2]
                 .map(|n| self.d_activate(n))
                 .diagonal()
-                .mul(&expected.sub(&activations[self.layers()]).scale(2.0));
+                .mul(&expected.sub(&activations[L-1]).scale(2.0));
 
         errors.push(error);
 
-        let mut weight_errors = Vec::with_capacity(self.layers());
+        let mut weight_errors = Vec::with_capacity(L-1);
 
-        for i in 0..self.layers() {
-            let l = self.layers() - i;
-
-            let weight_error_l = errors[i].mul(&activations[l-1].transpose());
-
+        for (i, l) in (0..L-1).map(|i| (i, L-2-i)) {
+            let weight_error_l = errors[i].mul(&activations[l].transpose());
             weight_errors.push(weight_error_l);
 
-            if l == 1 {
+            if l == 0 {
                 break
             }
 
             let error_l = 
-                sums[l-2]
+                sums[l-1]
                     .map(|n| self.d_activate(n))
                     .diagonal()
-                    .mul(&self.weights[l-2])
+                    .mul(&self.weights[l].transpose())
                     .mul(&errors[i]);
 
             errors.push(error_l);
         }
 
-        for i in 0..self.layers() {
-            self.weights[i].sub_eq(&weight_errors[i]);
-            self.biases[i].sub_eq(&errors[i]);
+        for (i, l) in (0..L-1).map(|i| (i, L-2-i)) {   
+            self.weights[i].add_eq(&weight_errors[l]);
+            self.biases[i].add_eq(&errors[l]);
         }
     }
 }
