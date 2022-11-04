@@ -3,6 +3,8 @@ use rand::{distributions::Standard, prelude::Distribution, Rng};
 
 use super::num::*;
 
+/// Default numeric matrix type
+pub type DefaultNumeric = f64;
 /// type representing matrix dimensions
 type Dim = (usize, usize);
 
@@ -184,7 +186,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct Matrix<T: Num> {
+pub struct Matrix<T: Num=DefaultNumeric> {
     buf: Vec<T>,
     row: usize,
     col: usize,
