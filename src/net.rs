@@ -58,8 +58,8 @@ impl<const L: usize> Net<L> {
             .collect()
     }
 
-    pub fn layers(&self) -> usize {
-        L - 1
+    pub fn learn_scale(&self) -> f64 {
+        self.learn_rate / self.batch_size as f64
     }
 
     fn activate(&self, n: N) -> N {
@@ -93,15 +93,45 @@ impl<const L: usize> Net<L> {
     pub fn backward_prop(&mut self, input: Vec<&Matrix>, expected: Vec<&Matrix>) {
         let epoch_steps = (expected.len() as f32 / (self.batch_size) as f32).ceil() as usize;
 
+        // ISSUE: batch learn rate not always learn rate as last batch will not be exactly
+        // equal to the batch size (data count not always divisible by batch_size)
+
+        // TODO: move error vectors into Net member so it doesn't have to
+        // reallocate buffers for every trait - same for Vec<weights, sums, errors, weight_errors>
+
         for _ in 0..TRAIN_EPOCH {
-            // TODO: assert input.len() > 1
-            let (mut errors_acc, mut weight_errors_acc) = self.train(input[0], expected[0]);
+            let mut error_acc = Vec::new();    
+            let mut weight_error_acc = Vec::new();    
+
+            for i in 0..input.len() {
+                if i % self.batch_size == 0 {
+                    // reset accumulator
+                    (error_acc, weight_error_acc) = self.train(input[0], expected[0]);
+
+                    for (j, l) in (0..L-1).map(|i| (i, L-2-i)) {   
+                        // apply errors
+                        self.weights[i].add_eq(&weight_error_acc[l]);
+                        self.biases[i].add_eq(&error_acc[l]);
+                    }
+                }
+
+                let (error, weight_error) = self.train(input[i], expected[i]);
+
+                for j in 0..L-1 {
+                    error_acc[j].add_eq(&error[j].scale(self.learn_scale()));
+                    weight_error_acc[j].add_eq(&weight_error[j].scale(self.learn_scale()));
+                }
+            }
 
             for i in 1..epoch_steps {
-                let (error, weight_error) = self.train(input[i], expected[i]);
+
+                
+                for i in 0..self.batch_size {
+                    
+                }
                 
                 for j in 0..errors_acc.len() {
-                    errors_acc[j].add_eq(&error[j]);
+                    errors_acc[j].add_eq(&error[j].scale(self.learn_rate/self.batch_size as f64));
                     weight_errors_acc[j].add_eq(&weight_error[j]);
                 }
 

@@ -11,5 +11,5 @@ use mat::*;
 use net::Net;
 
 fn main() {
-
+    Net::new([5, 10, 5, 6, 50]);
 }

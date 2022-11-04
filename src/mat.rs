@@ -298,7 +298,7 @@ impl<T: Num> Matrix<T> {
         Self::from_map(self.dim(), |(r, c)| scalar * self[(r, c)])
     }
 
-    pub fn add_eq<M: MatrixType<T>>(&mut self, other: &M) {
+    pub fn add_eq<M: MatrixType<T>>(&mut self, other: &M) -> &Self {
         if self.dim() != other.dim() {
             panic!("addition error")
         }
@@ -306,9 +306,11 @@ impl<T: Num> Matrix<T> {
         for (i, n) in self.buf.iter_mut().enumerate() {
             *n += other[i]
         }
+
+        self
     }
 
-    pub fn sub_eq<M: MatrixType<T>>(&mut self, other: &M) {
+    pub fn sub_eq<M: MatrixType<T>>(&mut self, other: &M) -> &Self{
         if self.dim() != other.dim() {
             panic!("addition error")
         }
@@ -316,6 +318,8 @@ impl<T: Num> Matrix<T> {
         for (i, n) in self.buf.iter_mut().enumerate() {
             *n -= other[i]
         }
+
+        self
     }
 }
 
