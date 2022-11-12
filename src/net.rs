@@ -50,8 +50,12 @@ pub struct Network<const L: usize> {
     sums: Vec<Matrix>,
     // layer error buffer
     errors: Vec<Matrix>,
+    // layer error accumulation buffer
+    error_acc: Vec<Matrix>,
     // weight error buffer
-    weight_errors: Vec<Matrix>
+    weight_errors: Vec<Matrix>,
+    // weight error accumulation buffer
+    weight_error_acc: Vec<Matrix>
 }
 
 impl<const L: usize> Network<L> {
@@ -93,7 +97,19 @@ impl<const L: usize> Network<L> {
                     .collect()
             },
 
+            error_acc: {
+                (0..form.len()-1)
+                    .map(|i| Matrix::zeros((form[i], 1)))
+                    .collect()
+            },
+
             weight_errors: {
+                (0..form.len()-1)
+                    .map(|i| Matrix::zeros((form[i], form[i+1])))
+                    .collect()
+            },
+
+            weight_error_acc: {
                 (0..form.len()-1)
                     .map(|i| Matrix::zeros((form[i], form[i+1])))
                     .collect()
@@ -101,12 +117,18 @@ impl<const L: usize> Network<L> {
         }
     }
 
-    /// Clears training buffers
-    pub fn clear_train_data(&mut self) {
+    /// Clears propagation buffers
+    pub fn clear_propagation_data(&mut self) {
         self.activations.clear();
         self.sums.clear();
         self.errors.clear();
         self.weight_errors.clear();
+    }
+
+    /// Clears accumulation buffers
+    pub fn clear_accumulation_data(&mut self) {
+        self.error_acc.clear();
+        self.weight_error_acc.clear()
     }
 
     /// Applies activation function to one number
@@ -133,6 +155,17 @@ impl<const L: usize> Network<L> {
         })
     }
 
+    pub fn apply_gradient(&mut self, sample_size: usize) {
+        // coefficient of learn rate
+        let learn_rate = self.meta_data.learn_rate / sample_size as f64;
+
+        // apply stochastic error gradient 
+        for j in 0..L-1 {
+            self.biases[j].add_eq(&self.error_acc[j].scale(learn_rate));
+            self.weights[j].add_eq(&self.weight_error_acc[j].scale(learn_rate));
+        }
+    }
+
     pub fn forward_prop(&self, input: &Matrix<N>) -> Matrix {
         if input.row() != self.meta_data.form[0] {
             panic!()
@@ -149,74 +182,39 @@ impl<const L: usize> Network<L> {
             })
     }
 
-    pub fn backward_prop(&mut self, input: Vec<&Matrix>, expected: Vec<&Matrix>) {
-        if input.len() != expected.len() {
+    pub fn backward_prop(&mut self, inputs: &Vec<Matrix>, expected: &Vec<Matrix>) {
+        if inputs.len() != expected.len() {
             panic!()
         }
 
-        // for k in 0.. {
-        //     let mut bias_error: Vec<_> = self.meta_data.form
-        //         .iter()
-        //         .skip(1)
-        //         .map(|l| Matrix::zeros((*l, 1)))
-        //         .collect();
+        self.clear_accumulation_data();
 
-        //     let mut weight_error: Vec<_> = self
-        //         .form()
-        //         .zip(self.form().skip(1))
-        //         .map(|(l1, l2)| Matrix::zeros((*l2, *l1)))
-        //         .collect();
+        for (i, (input, expected)) in inputs.iter().zip(expected.iter()).enumerate() {
+            self.train(input, expected);
+            
+            // accumulate errors
+            for j in 0..L-1 {
+                self.error_acc[j].add_eq(&self.errors[j]);
+                self.weight_error_acc[j].add_eq(&self.weight_errors[j]);
+            }
 
-        //     for i in k*self.meta_data.batch_size..(k+1)*self.meta_data.batch_size {
-        //         let (bias_error_l, weight_error_l) = self.train(input[i], expected[i]);
-                
-        //         for j in 0..bias_error.len() {
-        //             bias_error[j].add_eq(&bias_error_l[j].scale(self.learn_rate/self.batch_size as f64));
-        //             weight_error[j].add_eq(&weight_error_l[j].scale(self.learn_rate/self.batch_size as f64));
-        //         }
-        //     }
-        // }
+            if i % self.meta_data.batch_size == 0 {
+                self.apply_gradient(self.meta_data.batch_size);
+                self.clear_accumulation_data();
+            }
 
-
-
-
-        // let epoch_steps = (expected.len() as f32 / (self.batch_size) as f32).ceil() as usize;
-
-        // ISSUE: batch learn rate not always learn rate as last batch will not be exactly
-        // equal to the batch size (data count not always divisible by batch_size)
-
-        // TODO: move error vectors into Net member so it doesn't have to
-        // reallocate buffers for every trait - same for Vec<weights, sums, errors, weight_errors>
-
-        // for _ in 0..TRAIN_EPOCH {
-        //     let mut error_acc = Vec::new();    
-        //     let mut weight_error_acc = Vec::new();    
-
-        //     for i in 0..input.len() {
-        //         if i % self.batch_size == 0 {
-        //             // reset accumulator
-        //             (error_acc, weight_error_acc) = self.train(input[0], expected[0]);
-
-        //             for (j, l) in (0..L-1).map(|i| (i, L-2-i)) {   
-        //                 // apply errors
-        //                 self.weights[i].add_eq(&weight_error_acc[l]);
-        //                 self.biases[i].add_eq(&error_acc[l]);
-        //             }
-        //         }
-
-        //         let (error, weight_error) = self.train(input[i], expected[i]);
-
-        //         for j in 0..L-1 {
-        //             error_acc[j].add_eq(&error[j].scale(self.learn_scale()));
-        //             weight_error_acc[j].add_eq(&weight_error[j].scale(self.learn_scale()));
-        //         }
-        //     }
-        // }
+            let remainder = inputs.len() % self.meta_data.batch_size;
+            self.apply_gradient(remainder);
+        }
     }
 
+    // NOTE: d_cost not used? check equation sheet for reference 
+
+    /// Trains network against a provided set of inputs and expected outputs,  
+    /// storing the error results in the 'errors' and 'weight_errors' buffers
     pub fn train(&mut self, input: &Matrix, expected: &Matrix) {
         // clear previous training data
-        self.clear_train_data();
+        self.clear_propagation_data();
         
         // push initial input as layer_0
         self.activations.push(input.clone());
@@ -238,7 +236,7 @@ impl<const L: usize> Network<L> {
         let error = self.sums[L-2]
             .map(|n| self.d_activate(n))
             .diagonal()
-            .mul(&self.cost_matrix(&expected, L-1));
+            .mul(&self.d_cost_matrix(&expected, L-1));
 
         self.errors.push(error);
 

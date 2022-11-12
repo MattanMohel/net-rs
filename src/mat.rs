@@ -61,11 +61,10 @@ where
     where
         F: Fn(T) -> T
     {
-        let buf = 
-            self
-                .iter()
-                .map(|n| f(n))
-                .collect();
+        let buf = self
+            .iter()
+            .map(|n| f(n))
+            .collect();
 
         Matrix::from_buf(self.dim(), buf)
     }
@@ -75,11 +74,10 @@ where
     where
         F: Fn(T) -> T
     {
-        let buf = 
-            self
-                .iter()
-                .map(|i| scalar * i)
-                .collect();
+        let buf = self
+            .iter()
+            .map(|i| scalar * i)
+            .collect();
 
         Matrix::from_buf(self.dim(), buf)
     }
@@ -209,12 +207,11 @@ pub struct Matrix<T: Num=N> {
 impl<T: Num> Matrix<T> {
     /// Returns a new (r, c) matrix from 2D [[c]; r] array
     pub fn from_arr<const C: usize, const R: usize>(arr: [[T; C]; R]) -> Self {
-        let buf = 
-            arr
-                .iter()
-                .copied()
-                .flatten()
-                .collect();
+        let buf = arr
+            .iter()
+            .copied()
+            .flatten()
+            .collect();
 
         Self {
             buf,
@@ -241,10 +238,9 @@ impl<T: Num> Matrix<T> {
     where
         F: FnMut(Dim) -> T
     {
-        let buf = 
-            (0..row*col)
-                .map(|i| map((i/col, i%col)))
-                .collect();
+        let buf = (0..row*col)
+            .map(|i| map((i/col, i%col)))
+            .collect();
 
         Self {
             buf,
@@ -444,10 +440,9 @@ where
     }
 
     pub fn to_matrix(&self) -> Matrix<T> {
-        let buf = 
-            (0..self.row*self.col)
-                .map(|i| self[(i/self.col, i%self.col)])
-                .collect();
+        let buf = (0..self.row*self.col)
+            .map(|i| self[(i/self.col, i%self.col)])
+            .collect();
 
         Matrix::from_buf(self.dim(), buf)
     }
