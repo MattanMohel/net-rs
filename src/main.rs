@@ -3,13 +3,12 @@ use std::ops::Deref;
 pub mod mat;
 pub mod num;
 pub mod net;
-pub mod act;
 pub mod cost;
+pub mod num_fn;
+pub mod activation;
 
-use num::N;
-use mat::*;
-use net::Net;
+use net::Network;
 
 fn main() {
-    Net::new([5, 10, 5, 6, 50]);
+    Network::new([5, 10, 5, 6, 50]);
 }

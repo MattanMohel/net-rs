@@ -1,20 +1,24 @@
-use crate::num::N;
+use super::num_fn::NumeralFn;
+use super::num::N;
 
-
+/// Enumerated network cost function
+#[derive(Clone, Copy)]
 pub enum Cost {
     Quad
 }
 
-impl Cost {
-    pub fn cost(&self, n: N, expected: N) -> N {
+use Cost::*;
+
+impl NumeralFn<(N, N)> for Cost {
+    fn value(&self, (e, x): (N, N)) -> N {
         match self {
-            Cost::Quad => (expected - n).powi(2)
+            Quad => (e - x).powi(2)
         }
     }
 
-    pub fn d_cost(&self, n: N, expected: N) -> N {
+    fn deriv(&self, (e, x): (N, N)) -> N {
         match self {
-            Cost::Quad => 2. * (expected - n)
+            Quad => 2. * (e - x)
         }
     }
 }
