@@ -1,0 +1,13 @@
+C:\repo\Rust\net-rs\target\release\deps\gif-4578bfb4b8cc382e.rmeta: C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\lib.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\traits.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\common.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\mod.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\decoder.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\encoder.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\../README.md
+
+C:\repo\Rust\net-rs\target\release\deps\libgif-4578bfb4b8cc382e.rlib: C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\lib.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\traits.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\common.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\mod.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\decoder.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\encoder.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\../README.md
+
+C:\repo\Rust\net-rs\target\release\deps\gif-4578bfb4b8cc382e.d: C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\lib.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\traits.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\common.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\mod.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\decoder.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\encoder.rs C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\../README.md
+
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\lib.rs:
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\traits.rs:
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\common.rs:
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\mod.rs:
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\reader\decoder.rs:
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\encoder.rs:
+C:\Users\matta\.cargo\registry\src\github.com-1ecc6299db9ec823\gif-0.11.4\src\../README.md:

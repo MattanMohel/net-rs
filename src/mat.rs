@@ -1,4 +1,4 @@
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 use std::marker::PhantomData;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
@@ -380,11 +380,24 @@ impl<'a, T: Num> Index<Dim> for Matrix<T> {
     }
 }
 
+impl<'a, T: Num> IndexMut<Dim> for Matrix<T> {
+    fn index_mut(&mut self, i: Dim) -> &mut Self::Output {
+        let flattened = self.to_index(i);
+        &mut self.buf[flattened]
+    }
+}
+
 impl<'a, T: Num> Index<usize> for Matrix<T> {
     type Output = T;
 
     fn index(&self, i: usize) -> &Self::Output {
         &self.buf[i]
+    }
+}
+
+impl<'a, T: Num> IndexMut<usize> for Matrix<T> {
+    fn index_mut(&mut self, i: usize) -> &mut Self::Output {
+        &mut self.buf[i]
     }
 }
 
