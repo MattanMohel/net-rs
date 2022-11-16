@@ -5,7 +5,7 @@ use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
 
-use crate::mat::Matrix;
+use super::matrix::Matrix;
 
 /// MNIST Data Formatting Information
 ///
@@ -49,15 +49,10 @@ const TEST_IMAGES:  usize = 10_000;
 const IMAGE_DATA_OFFSET: usize = 16;
 const BYTES_PER_IMAGE: usize = 28*28;
 
-/// Sample of (expected number, image source)
-pub type Sample = (Matrix, Matrix);
-
 /// Struct for reading and storing the 
 /// MNIST dataset data in a '.jpg' format
 pub struct Reader {
-    train_data: Vec<Sample>,
-    test_data:  Vec<Sample>,
-    shuffle_seed: StdRng 
+
 }
 
 enum DataType {
@@ -128,20 +123,5 @@ impl Reader {
     fn as_u32(buf: &[u8]) -> u32 {
         let bytes = [buf[0], buf[1], buf[2], buf[3]];
         u32::from_be_bytes(bytes)
-    }
-
-    pub fn set_seed(&mut self, seed: Option<u64>) {
-        match seed {
-            Some(n) => self.shuffle_seed = StdRng::seed_from_u64(n),
-            None => self.shuffle_seed = StdRng::from_rng(thread_rng()).unwrap()
-        }
-    }
-
-    pub fn shuffle_train_data(&mut self) {
-        self.train_data.shuffle(&mut self.shuffle_seed);
-    }
-
-    pub fn shuffle_test_data(&mut self) {
-        self.test_data.shuffle(&mut self.shuffle_seed);
     }
 }

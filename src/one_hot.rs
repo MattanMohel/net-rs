@@ -1,5 +1,5 @@
-use crate::mat::{MatrixType, Dim};
-use crate::num::Num;
+use super::matrix::{IMatrix, Dim};
+use super::num::Num;
 use std::marker::PhantomData;
 use std::ops::Index;
 
@@ -38,7 +38,7 @@ impl<T: Num> Index<usize> for OneHot<T> {
     }
 }
 
-impl<T: Num> MatrixType<T> for OneHot<T> {
+impl<T: Num> IMatrix<T> for OneHot<T> {
     fn row(&self) -> usize {
         self.row
     }

@@ -3,19 +3,23 @@ use std::marker::PhantomData;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use rand::Rng;
+
+use super::matrix_slice::MatrixSlice;
 use super::num::*;
 
 /// type representing matrix dimensions
 pub type Dim = (usize, usize);
 
-pub trait MatrixType<T: Num> 
+pub trait IMatrix<T: Num> 
 where
     Self: Index<Dim, Output=T> + Index<usize, Output=T> + Sized
 {
     /// Returns the number of rows
     fn row(&self) -> usize;
+
     /// Returns the number of columns
     fn col(&self) -> usize;
+
     /// Returns the row stride 
     fn stride(&self) -> usize; 
     
@@ -68,10 +72,7 @@ where
     }
 
     /// Scales each element by given scalar
-    fn scale<F>(&self, scalar: T) -> Matrix<T>
-    where
-        F: Fn(T) -> T
-    {
+    fn scale(&self, scalar: T) -> Matrix<T> {
         let buf = self
             .iter()
             .map(|i| scalar * i)
@@ -79,7 +80,19 @@ where
 
         Matrix::from_buf(self.dim(), buf)
     }
-    
+
+    /// Returns a the transpose matrix
+    fn transpose(&self) -> Matrix<T> {
+        let mut buf = Vec::with_capacity(self.row()*self.col());
+
+        for c in 0..self.col() {
+            for r in 0..self.row() {
+                buf.push(self[(r, c)]);
+            }
+        }
+
+        Matrix::from_buf(self.dim_inv(), buf)
+    }
 
     /// Returns a (n, 1) dimensioned matrix as a (n, n)
     /// matrix who's elements are mapped across its diagonal
@@ -195,6 +208,48 @@ where
     }
 }
 
+pub struct MatrixIter<'a, T, M> 
+where
+    T: Num,
+    M: IMatrix<T>
+{
+    mat: &'a M,
+    i: usize,
+    _t: PhantomData<T>
+}
+
+impl<'a, T, M> MatrixIter<'a, T, M> 
+where
+    T: Num,
+    M: IMatrix<T>
+{
+    /// Returns a new iterator 
+    pub fn new(mat: &'a M) -> Self {
+        Self { 
+            mat, 
+            i: 0, 
+            _t: PhantomData::default() 
+        }
+    }
+}
+
+impl<'a, T, M> Iterator for MatrixIter<'a, T, M> 
+where
+    T: Num,
+    M: IMatrix<T>
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i == self.mat.row() * self.mat.col() {
+            return None
+        }
+
+        self.i += 1;
+        Some(self.mat[self.i - 1])
+    }
+}
+
 #[derive(Clone)]
 pub struct Matrix<T: Num=N> {
     buf: Vec<T>,
@@ -287,16 +342,6 @@ impl<T: Num> Matrix<T> {
         Self::from_map((row, col), |_| rng.gen_range(-T::one()..T::one()))
     }
 
-    /// Returns a new transpose matrix
-    pub fn transpose(&self) -> Self {
-        self.slice(self.dim_inv(), |(r, c)| (c, r)).to_matrix()
-    }
-
-    /// Returns a new scaled matrix
-    pub fn scale(&self, scalar: T) -> Self {
-        Self::from_map(self.dim(), |(r, c)| scalar * self[(r, c)])
-    }
-
     /// Returns a new mapped matrix slice
     pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> 
     where
@@ -315,19 +360,13 @@ impl<T: Num> Matrix<T> {
         self.slice((num, self.row), move |(i, j)| (j, beg + i*stride))
     }
 
-    /// Returns a slice of the transpose matrix
+    /// Returns a slice to the transpose matrix
     pub fn transposed(&self) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
         self.slice(self.dim_inv(), |(r, c)| (c, r))
     }
 
-    pub fn filled(&mut self, fill: T) -> &mut Self {
-        for n in self.buf.iter_mut() {
-            *n = fill;
-        }
-        self
-    }
-
-    pub fn add_eq<M: MatrixType<T>>(&mut self, other: &M) -> &Self {
+    /// Adds a matrix to self
+    pub fn add_eq<M: IMatrix<T>>(&mut self, other: &M) -> &Self {
         if self.dim() != other.dim() {
             panic!("addition error")
         }
@@ -339,7 +378,8 @@ impl<T: Num> Matrix<T> {
         self
     }
 
-    pub fn sub_eq<M: MatrixType<T>>(&mut self, other: &M) -> &Self{
+    /// Subtracts a matrix from self
+    pub fn sub_eq<M: IMatrix<T>>(&mut self, other: &M) -> &Self{
         if self.dim() != other.dim() {
             panic!("addition error")
         }
@@ -352,32 +392,11 @@ impl<T: Num> Matrix<T> {
     }
 }
 
-impl<T: Num> MatrixType<T> for Matrix<T> {
-    fn row(&self) -> usize {
-        self.row
-    }
-
-    fn col(&self) -> usize {
-        self.col
-    }
-
-    fn stride(&self) -> usize {
-        self.col
-    }
-}
-
 impl<'a, T: Num> Index<Dim> for Matrix<T> {
     type Output = T;
 
     fn index(&self, i: Dim) -> &Self::Output {
         &self.buf[self.to_index(i)]
-    }
-}
-
-impl<'a, T: Num> IndexMut<Dim> for Matrix<T> {
-    fn index_mut(&mut self, i: Dim) -> &mut Self::Output {
-        let flattened = self.to_index(i);
-        &mut self.buf[flattened]
     }
 }
 
@@ -389,28 +408,20 @@ impl<'a, T: Num> Index<usize> for Matrix<T> {
     }
 }
 
+impl<'a, T: Num> IndexMut<Dim> for Matrix<T> {
+    fn index_mut(&mut self, i: Dim) -> &mut Self::Output {
+        let flattened = self.to_index(i);
+        &mut self.buf[flattened]
+    }
+}
+
 impl<'a, T: Num> IndexMut<usize> for Matrix<T> {
     fn index_mut(&mut self, i: usize) -> &mut Self::Output {
         &mut self.buf[i]
     }
 }
 
-pub struct MatrixSlice<'a, T, F> 
-where
-    T: Num,
-    F: Fn(Dim) -> Dim 
-{
-    mat: &'a Matrix<T>,
-    row: usize,
-    col: usize,
-    map: F,
-}
-
-impl<'a, T, F> MatrixType<T> for MatrixSlice<'a, T, F> 
-where
-    T: Num,
-    F: Fn(Dim) -> Dim 
-{
+impl<T: Num> IMatrix<T> for Matrix<T> {
     fn row(&self) -> usize {
         self.row
     }
@@ -418,101 +429,8 @@ where
     fn col(&self) -> usize {
         self.col
     }
-    
+
     fn stride(&self) -> usize {
-        self.mat.col
-    }
-}
-
-impl<'a, T, F> MatrixSlice<'a, T, F> 
-where
-    T: Num,
-    F: Fn(Dim) -> Dim 
-{
-    fn to_index(&self, (r, c): Dim) -> usize {
-        self.mat.col() * r + c
-    }
-
-    pub fn new(mat: &'a Matrix<T>, (row, col): Dim, map: F) -> MatrixSlice<'a, T, impl Fn(Dim) -> Dim> {
-        MatrixSlice { 
-            mat, 
-            row, 
-            col, 
-            map
-        }
-    }
-
-    pub fn to_matrix(&self) -> Matrix<T> {
-        let buf = (0..self.row*self.col)
-            .map(|i| self[(i/self.col, i%self.col)])
-            .collect();
-
-        Matrix::from_buf(self.dim(), buf)
-    }
-}
-
-impl<'a, T, F> Index<Dim> for MatrixSlice<'a, T, F> 
-where
-    T: Num,
-    F: Fn(Dim) -> Dim 
-{
-    type Output=T;
-
-    fn index(&self, i: Dim) -> &Self::Output {
-        &self.mat[self.to_index((self.map)(i))]
-    }
-}
-
-impl<'a, T, F> Index<usize> for MatrixSlice<'a, T, F> 
-where
-    T: Num,
-    F: Fn(Dim) -> Dim 
-{
-    type Output=T;
-
-    fn index(&self, i: usize) -> &Self::Output {
-        let i = (self.map)((i/self.col, i%self.col));
-        &self.mat[self.to_index(i)]
-    }
-}
-
-pub struct MatrixIter<'a, T, M> 
-where
-    T: Num,
-    M: MatrixType<T>
-{
-    mat: &'a M,
-    i: usize,
-    _t: PhantomData<T>
-}
-
-impl<'a, T, M> MatrixIter<'a, T, M> 
-where
-    T: Num,
-    M: MatrixType<T>
-{
-    pub fn new(mat: &'a M) -> Self {
-        Self { 
-            mat, 
-            i: 0, 
-            _t: PhantomData::default() 
-        }
-    }
-}
-
-impl<'a, T, M> Iterator for MatrixIter<'a, T, M> 
-where
-    T: Num,
-    M: MatrixType<T>
-{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.i == self.mat.row() * self.mat.col() {
-            return None
-        }
-
-        self.i += 1;
-        Some(self.mat[self.i - 1])
+        self.col
     }
 }

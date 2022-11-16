@@ -2,7 +2,7 @@ use super::num_fn::NumeralFn;
 use super::activation::Activation;
 use super::cost::Cost;
 use super::num::N;
-use super::mat::*;
+use super::matrix::*;
 
 const LEARN_RATE: f64 = 0.01;
 const BATCH_SIZE: usize = 64;
