@@ -1,24 +1,53 @@
-use std::fs;
+use std::fs::{self, File};
+use std::io::Read;
 use std::path::PathBuf;
-use image::DynamicImage;
-use image::io::Reader as ImageReader;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
 
 use crate::mat::Matrix;
-use crate::num::N;
 
-const TRAIN_SAMPLES: usize = 60_000;
-const TEST_SAMPLES:  usize = 40_000;
-const TRAIN_ROOT_DIR: &str = "C://repo//res//MNIST//training";
-const TEST_ROOT_DIR:  &str = "C://repo//res//MNIST//testing";
-const SAMPLE_DIM: usize = 28*28;
-const DIGITS: usize = 3;
+/// MNIST Data Formatting Information
+///
+/// LABEL FORMAT:
+/// 
+/// [offset]   [value]          [description]
+/// 0000       2049             magic number
+/// 0004       ???              # labels
+/// 0008       ???              label
+/// 0009       ???              label
+/// ...
+/// xxxx       ???              label
 
-// TODO: Speed up - this is unbearably slow
-// probably needs a complete rework
-// switch to READBUF
+const LABEL_MAGIC_NUMBER: u32 = 2049;
+const TRAIN_LABELS_PATH: &str = "res//train_labels";
+const TEST_LABELS_PATH: &str = "res//test_labels";
+const TRAIN_LABELS: usize = 60_000;
+const TEST_LABELS:  usize = 10_000;
+const LABEL_DATA_OFFSET: usize = 8;
+
+/// IMAGE FORMAT:
+/// 
+/// [offset]   [value]          [description]
+/// 0000       2051             magic number
+/// 0004       ???              number of images
+/// 0008       28               # rows
+/// 0012       28               # columns
+/// 0016       ??               pixel
+/// 0017       ??               pixel
+/// ...
+/// xxxx       ??               pixel
+/// 
+/// TRAIN IMAGES: 60,000
+/// TEST IMAGES:  10,000
+
+const IMAGE_MAGIC_NUMBER: u32 = 2051;
+const TRAIN_IMAGES_PATH: &str = "res//train_images";
+const TEST_IMAGES_PATH: &str = "res//test_images";
+const TRAIN_IMAGES: usize = 60_000;
+const TEST_IMAGES:  usize = 10_000;
+const IMAGE_DATA_OFFSET: usize = 16;
+const BYTES_PER_IMAGE: usize = 28*28;
 
 /// Sample of (expected number, image source)
 pub type Sample = (Matrix, Matrix);
@@ -31,78 +60,74 @@ pub struct Reader {
     shuffle_seed: StdRng 
 }
 
+enum DataType {
+    Train,
+    Test
+}
+
 impl Reader {
     pub fn new(seed: Option<u64>, shuffle: bool) -> Self {
-        let shuffle_seed;
+        let train_images = Self::read_images(DataType::Train);
+        let train_labels = Self::read_labels(DataType::Train);
 
-        match seed {
-            Some(n) => shuffle_seed = StdRng::seed_from_u64(n),
-            None => shuffle_seed = StdRng::from_rng(thread_rng()).unwrap()
+        let test_images = Self::read_images(DataType::Test);
+        let test_labels = Self::read_labels(DataType::Test);
+
+
+        todo!()
+    }
+
+    fn read_labels(data_type: DataType) -> Vec<u8> {
+        let path;
+        match data_type {
+            DataType::Train => path = TRAIN_LABELS_PATH,
+            DataType::Test =>  path = TEST_LABELS_PATH
         }
 
-        let mut reader = Self 
-        {
-            train_data: Vec::with_capacity(TRAIN_SAMPLES),
-            test_data:  Vec::with_capacity(TEST_SAMPLES), 
-            shuffle_seed
-        };
+        let mut file = File::open(path).expect("couldn't open label path");
+        let mut labels = Vec::new();
 
-        // absoluet paths to train and test directories
-        let train_path = PathBuf::from(TRAIN_ROOT_DIR);
-        let test_path  = PathBuf::from(TEST_ROOT_DIR);
+        file.read_to_end(&mut labels).expect("couldn't read labels");
 
-        for digit in 0..DIGITS {
-            let digit_string   = digit.to_string();
+        assert_eq!(Self::as_u32(&labels[0..4]), LABEL_MAGIC_NUMBER);
 
-            // concatenate into absolute path for current digit samples
-            let num_train_path = train_path.join(PathBuf::from(&digit_string));
-            let num_test_path  = test_path.join(PathBuf::from(&digit_string));
+        labels.drain(0..LABEL_DATA_OFFSET);
+        
+        match data_type {
+            DataType::Train => assert_eq!(labels.len(), TRAIN_LABELS),
+            DataType::Test  => assert_eq!(labels.len(), TEST_LABELS)
+        }
+        
+        labels
+    }
 
-            // create directory iterator for all digit sampels
-            let train_dir_iter = fs::read_dir(num_train_path).unwrap();
-            let test_dir_iter  = fs::read_dir(num_test_path).unwrap();
-
-            // collect digit train samples
-            let mut train_data = train_dir_iter
-                .map(|sample| {
-                    let path = sample.unwrap().path();
-                    let image = ImageReader::open(path).unwrap().decode().unwrap();
-
-                    let mut digit_matrix = Matrix::zeros((DIGITS, 1));
-                    digit_matrix[(digit, 0)] = 1.0 as N;
-
-                    let buf = image.as_bytes().iter().map(|n| (*n as N) / 255.0 as N).collect();
-                    (digit_matrix, Matrix::from_buf((SAMPLE_DIM, 1), buf))     
-                })
-                .collect();
-                
-            // collect digit test samples
-            let mut test_data = test_dir_iter
-                .map(|sample| {
-                    let path = sample.unwrap().path();
-                    let image = ImageReader::open(path).unwrap().decode().unwrap();
-
-                    let mut digit_matrix = Matrix::zeros((DIGITS, 1));
-                    digit_matrix[(digit, 0)] = 1.0 as N;
-
-                    let buf = image.as_bytes().iter().map(|n| (*n as N) / 255.0 as N).collect();
-                    (digit_matrix, Matrix::from_buf((SAMPLE_DIM, 1), buf))             
-                })
-                .collect();
-            
-            // append digit data
-            reader.train_data.append(&mut train_data);
-            reader.test_data.append(&mut test_data);
-
-            println!("read {digit}");
+    fn read_images(data_type: DataType) -> Vec<u8> {
+        let path;
+        match data_type {
+            DataType::Train => path = TRAIN_IMAGES_PATH,
+            DataType::Test =>  path = TEST_IMAGES_PATH
         }
 
-        if shuffle {
-            reader.shuffle_train_data();
-            reader.shuffle_test_data();
+        let mut file = File::open(path).expect("couldn't open image path");
+        let mut images = Vec::new();
+
+        file.read_to_end(&mut images).expect("couldn't read images");
+
+        assert_eq!(Self::as_u32(&images[0..4]), IMAGE_MAGIC_NUMBER);
+
+        images.drain(0..IMAGE_DATA_OFFSET);
+        
+        match data_type {
+            DataType::Train => assert_eq!(images.len(), BYTES_PER_IMAGE*TRAIN_LABELS),
+            DataType::Test  => assert_eq!(images.len(), BYTES_PER_IMAGE*TEST_LABELS)
         }
 
-        reader
+        images
+    }
+
+    fn as_u32(buf: &[u8]) -> u32 {
+        let bytes = [buf[0], buf[1], buf[2], buf[3]];
+        u32::from_be_bytes(bytes)
     }
 
     pub fn set_seed(&mut self, seed: Option<u64>) {

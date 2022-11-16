@@ -16,8 +16,6 @@ where
     fn row(&self) -> usize;
     /// Returns the number of columns
     fn col(&self) -> usize;
-    /// Returns a reference to the buffer
-    fn buf(&self) -> &Vec<T>;
     /// Returns the row stride 
     fn stride(&self) -> usize; 
     
@@ -363,10 +361,6 @@ impl<T: Num> MatrixType<T> for Matrix<T> {
         self.col
     }
 
-    fn buf(&self) -> &Vec<T> {
-        &self.buf
-    }
-
     fn stride(&self) -> usize {
         self.col
     }
@@ -424,11 +418,7 @@ where
     fn col(&self) -> usize {
         self.col
     }
-
-    fn buf(&self) -> &Vec<T> {
-        &self.mat.buf
-    }
-
+    
     fn stride(&self) -> usize {
         self.mat.col
     }
