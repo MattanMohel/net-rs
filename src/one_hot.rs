@@ -7,9 +7,19 @@ use std::ops::Index;
 pub struct OneHot<T: Num> {
     row: usize,
     hot: usize,
-    one: T,
-    zero: T,
+    values: [T; 2],
     _t: PhantomData<T>
+}
+
+impl<T: Num> OneHot<T> {
+    pub fn new(row: usize, hot: usize) -> Self {
+        Self {
+            row,
+            hot,
+            values: [T::zero(), T::one()],
+            _t: PhantomData::default() 
+        }
+    }
 }
 
 impl<T: Num> Index<Dim> for OneHot<T> {
@@ -17,10 +27,10 @@ impl<T: Num> Index<Dim> for OneHot<T> {
 
     fn index(&self, (row, _): Dim) -> &Self::Output {
         if row == self.hot {
-            &self.one
+            &self.values[1]
         } 
         else {
-            &self.zero
+            &self.values[0]
         }
     }
 }
@@ -30,10 +40,10 @@ impl<T: Num> Index<usize> for OneHot<T> {
 
     fn index(&self, i: usize) -> &Self::Output {
         if i == self.hot {
-            &self.one
+            &self.values[1]
         } 
         else {
-            &self.zero
+            &self.values[0]
         }
     }
 }

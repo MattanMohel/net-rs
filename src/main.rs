@@ -1,6 +1,7 @@
 use matrix::Matrix;
 use matrix::IMatrix;
 use net::Network;
+use one_hot::OneHot;
 use num::Num;
 
 pub mod matrix;
@@ -30,9 +31,13 @@ fn main() {
     let m2 = m1.transpose();
     let prod = m1.mul(&m2);
     
-    print_matrix(&m1);
+    println!("m1: {}", m1.to_string());
     print_matrix(&m2);
     print_matrix(&prod);
 
     println!("det of m1: {}", prod.determinant());
+
+    let hot = OneHot::<i32>::new(5, 1);
+
+    println!("{}", hot.to_string());
 }

@@ -3,6 +3,8 @@ use std::marker::PhantomData;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use rand::Rng;
+use std::fmt;
+use std::boxed::Box;
 
 use super::matrix_slice::MatrixSlice;
 use super::num::*;
@@ -205,6 +207,20 @@ where
         }
 
         Matrix::from_buf((self.row(), other.col()), buf)
+    }
+
+    fn to_string(&self) -> String {
+        let len = 2*self.row()*self.col() + self.row();
+        let mut buf = String::with_capacity(len);
+
+        for r in 0..self.row() {
+            for c in 0..self.col() {
+                buf.push_str(format!("{} ", self[(r, c)]).as_str());
+            }
+            buf.push('\n');
+        } 
+
+        buf
     }
 }
 

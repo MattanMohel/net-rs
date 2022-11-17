@@ -52,7 +52,11 @@ const BYTES_PER_IMAGE: usize = 28*28;
 /// Struct for reading and storing the 
 /// MNIST dataset data in a '.jpg' format
 pub struct Reader {
-
+    train_images: Vec<Matrix>,
+    train_labels: Vec<Matrix>,
+    
+    test_images: Vec<Matrix>,
+    test_labels: Vec<Matrix>
 }
 
 enum DataType {
@@ -80,7 +84,7 @@ impl Reader {
         }
 
         let mut file = File::open(path).expect("couldn't open label path");
-        let mut labels = Vec::new();
+        let mut labels = Vec::new(); // TODO: initiate with capacity
 
         file.read_to_end(&mut labels).expect("couldn't read labels");
 
@@ -104,7 +108,7 @@ impl Reader {
         }
 
         let mut file = File::open(path).expect("couldn't open image path");
-        let mut images = Vec::new();
+        let mut images = Vec::new(); // TODO: initiate with capacity
 
         file.read_to_end(&mut images).expect("couldn't read images");
 
@@ -120,6 +124,45 @@ impl Reader {
         images
     }
 
+    fn parse_images(data_type: DataType, bytes: &Vec<u8>) -> Vec<Matrix> {
+        let mut images;
+
+        match data_type {
+            DataType::Train => images = Vec::with_capacity(TRAIN_IMAGES),
+            DataType::Test  => images = Vec::with_capacity(TEST_IMAGES),
+        }
+        
+        for i in 0..bytes.len()/BYTES_PER_IMAGE {
+            let image = bytes[i*BYTES_PER_IMAGE..(i+1)*BYTES_PER_IMAGE]
+                .map(|n| n as N)
+                .collect();
+
+            images.push(Matrix::from((BYTES_PER_IMAGE, 1), image));
+        }
+
+        images
+    }
+
+    fn parse_labels(data_type: DataType, bytes: &Vec<u8>) -> Vec<Matrix> {
+        let mut labels;
+
+        let buf = bytes.iter().map(|n| n as N).collect();
+
+        Matrix::from_buf(())
+
+        match data_type {
+            DataType::Train => images = Vec::with_capacity(TRAIN_IMAGES),
+            DataType::Test  => images = Vec::with_capacity(TEST_IMAGES),
+        }
+        
+        for i in 0..bytes.len()/BYTES_PER_IMAGE {
+            let image = bytes[i*BYTES_PER_IMAGE..(i+1)*BYTES_PER_IMAGE].collect();
+            images.push(Matrix::from((BYTES_PER_IMAGE, 1), image));
+        }
+
+        images
+    }
+    
     fn as_u32(buf: &[u8]) -> u32 {
         let bytes = [buf[0], buf[1], buf[2], buf[3]];
         u32::from_be_bytes(bytes)

@@ -26,7 +26,7 @@ pub trait Num:
     AddAssign + 
     SubAssign +
     SampleUniform +
-    Copy + Sized + fmt::Display + fmt::Debug
+    fmt::Display + fmt::Debug + Copy + Sized
 {
     fn zero() -> Self;
     fn one() -> Self;
