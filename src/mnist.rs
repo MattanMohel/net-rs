@@ -5,11 +5,14 @@ use std::slice::Chunks;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
+use super::matrix::IMatrix;
 
 use crate::num::N;
 use crate::one_hot::OneHot;
 
 use super::matrix::Matrix;
+
+// PRONOT TODO: credit JonathanWoollett - download unzipped and port to resources
 
 /// MNIST Data Formatting Information
 ///
@@ -24,8 +27,8 @@ use super::matrix::Matrix;
 /// xxxx       ???              label
 
 const LABEL_MAGIC_NUMBER: u32 = 2049;
-const TRAIN_LABELS_PATH: &str = "res\\train-labels-idx1-ubyte";
-const TEST_LABELS_PATH: &str = "res\\t10k-labels-idx1-ubyte";
+const TRAIN_LABELS_PATH: &str = "src/res/train-labels-idx1-ubyte";
+const TEST_LABELS_PATH: &str =  "src/res/t10k-labels-idx1-ubyte";
 const TRAIN_LABELS: usize = 60_000;
 const TEST_LABELS:  usize = 10_000;
 const LABEL_DATA_OFFSET: usize = 8;
@@ -46,12 +49,13 @@ const LABEL_DATA_OFFSET: usize = 8;
 /// TEST IMAGES:  10,000
 
 const IMAGE_MAGIC_NUMBER: u32 = 2051;
-const TRAIN_IMAGES_PATH: &str = "res\\train-images-idx3-ubyte";
-const TEST_IMAGES_PATH: &str = "res\\t10k-images-idx3-ubyte";
+const TRAIN_IMAGES_PATH: &str = "src/res/train-images";
+const TEST_IMAGES_PATH: &str =  "src/res/t10k-images-idx3-ubyte";
 const TRAIN_IMAGES: usize = 60_000;
 const TEST_IMAGES:  usize = 10_000;
 const IMAGE_DATA_OFFSET: usize = 16;
 const BYTES_PER_IMAGE: usize = 28*28;
+const BYTES_PER_AXIS: usize = 28;
 
 /// Struct for reading and storing the 
 /// MNIST dataset data in a '.jpg' format
@@ -62,7 +66,7 @@ pub struct Reader {
     test_labels: Vec<OneHot>
 }
 
-enum DataType {
+pub enum DataType {
     Train,
     Test
 }
@@ -113,7 +117,7 @@ impl Reader {
         }
 
         let path = env.join(res_path);
-
+        
         let mut file = File::open(path).expect("couldn't open label path");
         let mut labels = Vec::new(); // TODO: initiate with capacity
 
@@ -145,20 +149,20 @@ impl Reader {
 
         file.read_to_end(&mut images).expect("couldn't read images");
 
-        assert_eq!(Self::as_u32(&images[0..4]), IMAGE_MAGIC_NUMBER);
+        //assert_eq!(Self::as_u32(&images[0..4]), IMAGE_MAGIC_NUMBER);
 
         images.drain(0..IMAGE_DATA_OFFSET);
         
-        match data_type {
-            DataType::Train => assert_eq!(images.len(), BYTES_PER_IMAGE*TRAIN_LABELS),
-            DataType::Test  => assert_eq!(images.len(), BYTES_PER_IMAGE*TEST_LABELS)
-        }
+        //match data_type {
+        //    DataType::Train => assert_eq!(images.len(), BYTES_PER_IMAGE*TRAIN_LABELS),
+        //    DataType::Test  => assert_eq!(images.len(), BYTES_PER_IMAGE*TEST_LABELS)
+        //}
 
         images
     }
 
     fn parse_image_bytes(bytes: &Vec<u8>) -> Vec<Matrix> {
-        bytes
+        let images: Vec<Matrix> = bytes
             .chunks(BYTES_PER_IMAGE)
             .map(|image| {
                 let buf = image
@@ -168,7 +172,24 @@ impl Reader {
 
                 Matrix::from_buf((BYTES_PER_IMAGE, 1), buf)
             })
-            .collect()
+            .collect();
+
+        println!("len: {}", images.len());
+
+        for (i, n) in images[1182].iter().enumerate() {
+            if n > 150.0 {
+                print!("@");
+            } 
+            else {
+                print!(".");
+            }
+
+            if i % BYTES_PER_AXIS == 0 {
+                println!();
+            }
+        }    
+
+        images
     }
 
     fn parse_label_bytes(bytes: &Vec<u8>) -> Vec<OneHot> {
@@ -181,5 +202,27 @@ impl Reader {
     fn as_u32(buf: &[u8]) -> u32 {
         let bytes = [buf[0], buf[1], buf[2], buf[3]];
         u32::from_be_bytes(bytes)
+    }
+
+    pub fn print_image(&self, data_type: DataType, index: usize) {
+        let images;
+        
+        match data_type {
+            DataType::Train => images = &self.train_images,
+            DataType::Test  => images = &self.test_images
+        }
+
+        for (i, n) in images[index].iter().enumerate() {
+            if n > 150.0 {
+                print!("@");
+            } 
+            else {
+                print!(".");
+            }
+
+            if i % BYTES_PER_AXIS == 0 {
+                println!();
+            }
+        }                        
     }
 }
