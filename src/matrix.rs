@@ -12,7 +12,7 @@ use super::num::*;
 /// type representing matrix dimensions
 pub type Dim = (usize, usize);
 
-pub trait IMatrix<T: Num> 
+pub trait IMatrix<T: Num=N> 
 where
     Self: Index<Dim, Output=T> + Index<usize, Output=T> + Sized
 {
@@ -24,6 +24,9 @@ where
 
     /// Returns the row stride 
     fn stride(&self) -> usize; 
+
+    /// Returns self as new owned Matrix
+    fn to_matrix(&self) -> Matrix<T>;
     
     /// Returns the dimensions (row, col)
     fn dim(&self) -> Dim {
@@ -359,7 +362,7 @@ impl<T: Num> Matrix<T> {
     }
 
     /// Returns a new mapped matrix slice
-    pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> 
+    pub fn slice<F>(&self, dim: Dim, map: F) -> MatrixSlice<'_, impl Fn(Dim) -> Dim, T> 
     where
         F: Fn(Dim) -> Dim
     {
@@ -367,17 +370,17 @@ impl<T: Num> Matrix<T> {
     }
 
     /// Returns a slice to the matrix's rows
-    pub fn rows(&self, beg: usize, num: usize, stride: usize) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
+    pub fn rows(&self, beg: usize, num: usize, stride: usize) -> MatrixSlice<'_, impl Fn(Dim) -> Dim, T> {
         self.slice((num, self.col), move |(i, j)| (beg + i*stride, j))
     }
 
     /// Returns a slice to the matrix's columns
-    pub fn cols(&self, beg: usize, num: usize, stride: usize) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
+    pub fn cols(&self, beg: usize, num: usize, stride: usize) -> MatrixSlice<'_, impl Fn(Dim) -> Dim, T> {
         self.slice((num, self.row), move |(i, j)| (j, beg + i*stride))
     }
 
     /// Returns a slice to the transpose matrix
-    pub fn transposed(&self) -> MatrixSlice<'_, T, impl Fn(Dim) -> Dim> {
+    pub fn transposed(&self) -> MatrixSlice<'_, impl Fn(Dim) -> Dim, T> {
         self.slice(self.dim_inv(), |(r, c)| (c, r))
     }
 
@@ -448,5 +451,9 @@ impl<T: Num> IMatrix<T> for Matrix<T> {
 
     fn stride(&self) -> usize {
         self.col
+    }
+
+    fn to_matrix(&self) -> Matrix<T> {
+        self.clone()
     }
 }

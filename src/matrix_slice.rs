@@ -1,10 +1,11 @@
 use std::ops::Index;
 use super::num::Num;
+use super::num::N;
 use super::matrix::Dim;
 use super::matrix::Matrix;
 use super::matrix::IMatrix;
 
-pub struct MatrixSlice<'a, T, F> 
+pub struct MatrixSlice<'a, F, T=N> 
 where
     T: Num,
     F: Fn(Dim) -> Dim 
@@ -15,7 +16,7 @@ where
     map: F,
 }
 
-impl<'a, T, F> IMatrix<T> for MatrixSlice<'a, T, F> 
+impl<'a, F, T> IMatrix<T> for MatrixSlice<'a, F, T> 
 where
     T: Num,
     F: Fn(Dim) -> Dim 
@@ -31,15 +32,21 @@ where
     fn stride(&self) -> usize {
         self.mat.col()
     }
+
+    fn to_matrix(&self) -> Matrix<T> {
+        let buf = (0..self.row*self.col)
+            .map(|i| self[(i/self.col, i%self.col)])
+            .collect();
+
+        Matrix::from_buf(self.dim(), buf)    }
 }
 
-impl<'a, T, F> MatrixSlice<'a, T, F> 
+impl<'a, F, T> MatrixSlice<'a, F, T> 
 where
     T: Num,
     F: Fn(Dim) -> Dim 
 {
-    /// Returns new slice from map
-    pub fn new(mat: &'a Matrix<T>, (row, col): Dim, map: F) -> MatrixSlice<'a, T, impl Fn(Dim) -> Dim> {
+    pub fn new(mat: &'a Matrix<T>, (row, col): Dim, map: F) -> MatrixSlice<'a, impl Fn(Dim) -> Dim, T> {
         MatrixSlice { 
             mat, 
             row, 
@@ -47,18 +54,9 @@ where
             map
         }
     }
-
-    /// Collects slice into an owned matrix
-    pub fn to_matrix(&self) -> Matrix<T> {
-        let buf = (0..self.row*self.col)
-            .map(|i| self[(i/self.col, i%self.col)])
-            .collect();
-
-        Matrix::from_buf(self.dim(), buf)
-    }
 }
 
-impl<'a, T, F> Index<Dim> for MatrixSlice<'a, T, F> 
+impl<'a, F, T> Index<Dim> for MatrixSlice<'a, F, T>
 where
     T: Num,
     F: Fn(Dim) -> Dim 
@@ -70,7 +68,7 @@ where
     }
 }
 
-impl<'a, T, F> Index<usize> for MatrixSlice<'a, T, F> 
+impl<'a, F, T> Index<usize> for MatrixSlice<'a, F, T>
 where
     T: Num,
     F: Fn(Dim) -> Dim 

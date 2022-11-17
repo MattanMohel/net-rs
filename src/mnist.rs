@@ -1,9 +1,13 @@
 use std::fs::{self, File};
-use std::io::Read;
-use std::path::PathBuf;
+use std::io::{Read, self};
+use std::path::{PathBuf, Path};
+use std::slice::Chunks;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, SeedableRng};
+
+use crate::num::N;
+use crate::one_hot::OneHot;
 
 use super::matrix::Matrix;
 
@@ -20,8 +24,8 @@ use super::matrix::Matrix;
 /// xxxx       ???              label
 
 const LABEL_MAGIC_NUMBER: u32 = 2049;
-const TRAIN_LABELS_PATH: &str = "res//train_labels";
-const TEST_LABELS_PATH: &str = "res//test_labels";
+const TRAIN_LABELS_PATH: &str = "res\\train-labels-idx1-ubyte";
+const TEST_LABELS_PATH: &str = "res\\t10k-labels-idx1-ubyte";
 const TRAIN_LABELS: usize = 60_000;
 const TEST_LABELS:  usize = 10_000;
 const LABEL_DATA_OFFSET: usize = 8;
@@ -42,8 +46,8 @@ const LABEL_DATA_OFFSET: usize = 8;
 /// TEST IMAGES:  10,000
 
 const IMAGE_MAGIC_NUMBER: u32 = 2051;
-const TRAIN_IMAGES_PATH: &str = "res//train_images";
-const TEST_IMAGES_PATH: &str = "res//test_images";
+const TRAIN_IMAGES_PATH: &str = "res\\train-images-idx3-ubyte";
+const TEST_IMAGES_PATH: &str = "res\\t10k-images-idx3-ubyte";
 const TRAIN_IMAGES: usize = 60_000;
 const TEST_IMAGES:  usize = 10_000;
 const IMAGE_DATA_OFFSET: usize = 16;
@@ -53,10 +57,9 @@ const BYTES_PER_IMAGE: usize = 28*28;
 /// MNIST dataset data in a '.jpg' format
 pub struct Reader {
     train_images: Vec<Matrix>,
-    train_labels: Vec<Matrix>,
-    
+    train_labels: Vec<OneHot>,   
     test_images: Vec<Matrix>,
-    test_labels: Vec<Matrix>
+    test_labels: Vec<OneHot>
 }
 
 enum DataType {
@@ -65,23 +68,51 @@ enum DataType {
 }
 
 impl Reader {
-    pub fn new(seed: Option<u64>, shuffle: bool) -> Self {
-        let train_images = Self::read_images(DataType::Train);
-        let train_labels = Self::read_labels(DataType::Train);
-
-        let test_images = Self::read_images(DataType::Test);
-        let test_labels = Self::read_labels(DataType::Test);
-
-
-        todo!()
+    pub fn new() -> Self {
+        let env = std::env::current_dir().expect("invalid working dir");
+        
+        Self { 
+            train_images: Self::parse_images(DataType::Train, &env),
+            train_labels: Self::parse_labels(DataType::Train, &env),
+            test_images:  Self::parse_images(DataType::Test, &env),
+            test_labels:  Self::parse_labels(DataType::Test, &env)
+        }
     }
 
-    fn read_labels(data_type: DataType) -> Vec<u8> {
-        let path;
+    pub fn train_images(&self) -> &Vec<Matrix> {
+        &self.train_images
+    }
+
+    pub fn train_labels(&self) -> &Vec<OneHot> {
+        &self.train_labels
+    }
+
+    pub fn test_images(&self) -> &Vec<Matrix> {
+        &self.test_images
+    }
+
+    pub fn test_labels(&self) -> &Vec<OneHot> {
+        &self.test_labels
+    }
+
+    fn parse_images(data_type: DataType, env: &PathBuf) -> Vec<Matrix> {
+        let image_bytes = Self::read_images(data_type, env);
+        Self::parse_image_bytes(&image_bytes)
+    }
+
+    fn parse_labels(data_type: DataType, env: &PathBuf) -> Vec<OneHot> {
+        let label_bytes = Self::read_labels(data_type, env);
+        Self::parse_label_bytes(&label_bytes)
+    }
+
+    fn read_labels(data_type: DataType, env: &PathBuf) -> Vec<u8> {
+        let res_path;
         match data_type {
-            DataType::Train => path = TRAIN_LABELS_PATH,
-            DataType::Test =>  path = TEST_LABELS_PATH
+            DataType::Train => res_path = TRAIN_LABELS_PATH,
+            DataType::Test =>  res_path = TEST_LABELS_PATH
         }
+
+        let path = env.join(res_path);
 
         let mut file = File::open(path).expect("couldn't open label path");
         let mut labels = Vec::new(); // TODO: initiate with capacity
@@ -100,12 +131,14 @@ impl Reader {
         labels
     }
 
-    fn read_images(data_type: DataType) -> Vec<u8> {
-        let path;
+    fn read_images(data_type: DataType, env: &PathBuf) -> Vec<u8> {
+        let res_path;
         match data_type {
-            DataType::Train => path = TRAIN_IMAGES_PATH,
-            DataType::Test =>  path = TEST_IMAGES_PATH
+            DataType::Train => res_path = TRAIN_IMAGES_PATH,
+            DataType::Test =>  res_path = TEST_IMAGES_PATH
         }
+
+        let path = env.join(res_path);
 
         let mut file = File::open(path).expect("couldn't open image path");
         let mut images = Vec::new(); // TODO: initiate with capacity
@@ -124,43 +157,25 @@ impl Reader {
         images
     }
 
-    fn parse_images(data_type: DataType, bytes: &Vec<u8>) -> Vec<Matrix> {
-        let mut images;
+    fn parse_image_bytes(bytes: &Vec<u8>) -> Vec<Matrix> {
+        bytes
+            .chunks(BYTES_PER_IMAGE)
+            .map(|image| {
+                let buf = image
+                    .iter()
+                    .map(|n| *n as N)
+                    .collect();
 
-        match data_type {
-            DataType::Train => images = Vec::with_capacity(TRAIN_IMAGES),
-            DataType::Test  => images = Vec::with_capacity(TEST_IMAGES),
-        }
-        
-        for i in 0..bytes.len()/BYTES_PER_IMAGE {
-            let image = bytes[i*BYTES_PER_IMAGE..(i+1)*BYTES_PER_IMAGE]
-                .map(|n| n as N)
-                .collect();
-
-            images.push(Matrix::from((BYTES_PER_IMAGE, 1), image));
-        }
-
-        images
+                Matrix::from_buf((BYTES_PER_IMAGE, 1), buf)
+            })
+            .collect()
     }
 
-    fn parse_labels(data_type: DataType, bytes: &Vec<u8>) -> Vec<Matrix> {
-        let mut labels;
-
-        let buf = bytes.iter().map(|n| n as N).collect();
-
-        Matrix::from_buf(())
-
-        match data_type {
-            DataType::Train => images = Vec::with_capacity(TRAIN_IMAGES),
-            DataType::Test  => images = Vec::with_capacity(TEST_IMAGES),
-        }
-        
-        for i in 0..bytes.len()/BYTES_PER_IMAGE {
-            let image = bytes[i*BYTES_PER_IMAGE..(i+1)*BYTES_PER_IMAGE].collect();
-            images.push(Matrix::from((BYTES_PER_IMAGE, 1), image));
-        }
-
-        images
+    fn parse_label_bytes(bytes: &Vec<u8>) -> Vec<OneHot> {
+        bytes
+            .iter()
+            .map(|label| OneHot::new(*label as usize, 10))
+            .collect()
     }
     
     fn as_u32(buf: &[u8]) -> u32 {

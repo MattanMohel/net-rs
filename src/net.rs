@@ -142,14 +142,14 @@ impl<const L: usize> Network<L> {
     }
 
     /// Computes layer cost matrix
-    fn cost_matrix(&self, exp: &Matrix,  layer: usize) -> Matrix {
+    fn cost_matrix<M: IMatrix>(&self, exp: &M,  layer: usize) -> Matrix {
         Matrix::from_map(exp.dim(), |r_c| {
             self.meta_data.cost.value((exp[r_c], self.activations[layer][r_c]))
         })
     }
 
     /// Computes layer cost derivative matrix
-    fn d_cost_matrix(&self, exp: &Matrix,  layer: usize) -> Matrix {
+    fn d_cost_matrix<M: IMatrix>(&self, exp: &M,  layer: usize) -> Matrix {
         Matrix::from_map(exp.dim(), |r_c| {
             self.meta_data.cost.deriv((exp[r_c], self.activations[layer][r_c]))
         })
@@ -166,7 +166,7 @@ impl<const L: usize> Network<L> {
         }
     }
 
-    pub fn forward_prop(&self, input: &Matrix<N>) -> Matrix {
+    pub fn forward_prop<M: IMatrix>(&self, input: &M) -> Matrix {
         if input.row() != self.meta_data.form[0] {
             panic!()
         }
@@ -174,7 +174,7 @@ impl<const L: usize> Network<L> {
         self.weights
             .iter()
             .zip(self.biases.iter())
-            .fold(input.clone(), |acc, (weight, bias)| {
+            .fold(input.to_matrix(), |acc, (weight, bias)| {
                 weight
                     .mul(&acc)
                     .add(&bias)
@@ -182,7 +182,11 @@ impl<const L: usize> Network<L> {
             })
     }
 
-    pub fn backward_prop(&mut self, inputs: &Vec<Matrix>, expected: &Vec<Matrix>) {
+    pub fn backward_prop<M, N>(&mut self, inputs: &Vec<M>, expected: &Vec<N>) 
+    where
+        M: IMatrix,
+        N: IMatrix
+    {
         if inputs.len() != expected.len() {
             panic!()
         }
@@ -212,12 +216,16 @@ impl<const L: usize> Network<L> {
 
     /// Trains network against a provided set of inputs and expected outputs,  
     /// storing the error results in the 'errors' and 'weight_errors' buffers
-    pub fn train(&mut self, input: &Matrix, expected: &Matrix) {
+    pub fn train<M, N>(&mut self, input: &M, expected: &N) 
+    where
+        M: IMatrix,
+        N: IMatrix
+    {
         // clear previous training data
         self.clear_propagation_data();
         
         // push initial input as layer_0
-        self.activations.push(input.clone());
+        self.activations.push(input.to_matrix());
 
         for i in 0..L-1 {
             // sum_l = weights_l * activations_l-1 + biases_l
@@ -236,7 +244,7 @@ impl<const L: usize> Network<L> {
         let error = self.sums[L-2]
             .map(|n| self.d_activate(n))
             .diagonal()
-            .mul(&self.d_cost_matrix(&expected, L-1));
+            .mul(&self.d_cost_matrix(expected, L-1));
 
         self.errors.push(error);
 

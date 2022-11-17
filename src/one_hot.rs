@@ -1,10 +1,14 @@
-use super::matrix::{IMatrix, Dim};
+use crate::matrix::Matrix;
+
+use super::matrix::IMatrix;
+use super::matrix::Dim;
+use super::num::N;
 use super::num::Num;
 use std::marker::PhantomData;
 use std::ops::Index;
 
 
-pub struct OneHot<T: Num> {
+pub struct OneHot<T: Num=N> {
     row: usize,
     hot: usize,
     values: [T; 2],
@@ -59,5 +63,20 @@ impl<T: Num> IMatrix<T> for OneHot<T> {
 
     fn stride(&self) -> usize {
         1
+    }
+
+    fn to_matrix(&self) -> Matrix<T> {
+        let buf = (0..self.row)
+            .map(|i| {
+                if i == self.hot {
+                    T::one()
+                }
+                else {
+                    T::zero()
+                }
+            })
+            .collect();
+
+        Matrix::from_buf(self.dim(), buf)
     }
 } 
