@@ -379,6 +379,13 @@ impl<T: Num> Matrix<T> {
         self.slice((num, self.row), move |(i, j)| (j, beg + i*stride))
     }
 
+    /// Sets all matrix elements to zero
+    pub fn zeroed(&mut self) {
+        for n in self.buf.iter_mut() {
+            *n = T::zero();
+        }
+    }
+
     /// Returns a slice to the transpose matrix
     pub fn transposed(&self) -> MatrixSlice<'_, impl Fn(Dim) -> Dim, T> {
         self.slice(self.dim_inv(), |(r, c)| (c, r))
@@ -387,7 +394,7 @@ impl<T: Num> Matrix<T> {
     /// Adds a matrix to self
     pub fn add_eq<M: IMatrix<T>>(&mut self, other: &M) -> &Self {
         if self.dim() != other.dim() {
-            panic!("addition error")
+            panic!("addition error, {:?} by {:?}", self.dim(), other.dim())
         }
 
         for (i, n) in self.buf.iter_mut().enumerate() {
@@ -400,7 +407,7 @@ impl<T: Num> Matrix<T> {
     /// Subtracts a matrix from self
     pub fn sub_eq<M: IMatrix<T>>(&mut self, other: &M) -> &Self{
         if self.dim() != other.dim() {
-            panic!("addition error")
+            panic!("subtraction error, {:?} by {:?}", self.dim(), other.dim())
         }
 
         for (i, n) in self.buf.iter_mut().enumerate() {

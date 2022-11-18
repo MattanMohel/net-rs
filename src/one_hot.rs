@@ -24,6 +24,10 @@ impl<T: Num> OneHot<T> {
             _t: PhantomData::default() 
         }
     }
+
+    pub fn hot(&self) -> usize {
+        self.hot
+    }
 }
 
 impl<T: Num> Index<Dim> for OneHot<T> {

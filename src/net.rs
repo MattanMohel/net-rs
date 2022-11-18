@@ -4,7 +4,7 @@ use super::cost::Cost;
 use super::num::N;
 use super::matrix::*;
 
-const LEARN_RATE: f64 = 0.01;
+const LEARN_RATE: f64 = 1.0;
 const BATCH_SIZE: usize = 64;
 
 pub struct Meta<const L: usize> {
@@ -68,50 +68,35 @@ impl<const L: usize> Network<L> {
             meta_data: Meta::new(form),
             
             biases: {
-                (0..form.len())
+                (1..form.len())
                     .map(|i| Matrix::zeros((form[i], 1)))
                     .collect()
             },
             
             weights: {
                 (0..form.len()-1)
-                    .map(|i| Matrix::random((form[i], form[i+1])))
+                    .map(|i| Matrix::random((form[i+1], form[i])))
                     .collect()
             },
 
-            activations: {
-                (0..form.len())
-                    .map(|i| Matrix::zeros((form[i], 1)))
-                    .collect()
-            },
+            activations: Vec::new(),
 
-            sums: {
+            sums: Vec::new(),
+
+            errors: Vec::new(),
+
+            weight_errors: Vec::new(),
+
+            error_acc: {
                 (1..form.len())
                     .map(|i| Matrix::zeros((form[i], 1)))
                     .collect()
             },
 
-            errors: {
-                (0..form.len()-1)
-                    .map(|i| Matrix::zeros((form[i], 1)))
-                    .collect()
-            },
-
-            error_acc: {
-                (0..form.len()-1)
-                    .map(|i| Matrix::zeros((form[i], 1)))
-                    .collect()
-            },
-
-            weight_errors: {
-                (0..form.len()-1)
-                    .map(|i| Matrix::zeros((form[i], form[i+1])))
-                    .collect()
-            },
 
             weight_error_acc: {
                 (0..form.len()-1)
-                    .map(|i| Matrix::zeros((form[i], form[i+1])))
+                    .map(|i| Matrix::zeros((form[i+1], form[i])))
                     .collect()
             }
         }
@@ -127,8 +112,12 @@ impl<const L: usize> Network<L> {
 
     /// Clears accumulation buffers
     pub fn clear_accumulation_data(&mut self) {
-        self.error_acc.clear();
-        self.weight_error_acc.clear()
+        for err in self.error_acc.iter_mut() {
+            err.zeroed();
+        }
+        for weight_err in  self.weight_error_acc.iter_mut() {
+            weight_err.zeroed();
+        }
     }
 
     /// Applies activation function to one number
@@ -182,41 +171,9 @@ impl<const L: usize> Network<L> {
             })
     }
 
-    pub fn backward_prop<M, N>(&mut self, inputs: &Vec<M>, expected: &Vec<N>) 
-    where
-        M: IMatrix,
-        N: IMatrix
-    {
-        if inputs.len() != expected.len() {
-            panic!()
-        }
-
-        self.clear_accumulation_data();
-
-        for (i, (input, expected)) in inputs.iter().zip(expected.iter()).enumerate() {
-            self.train(input, expected);
-            
-            // accumulate errors
-            for j in 0..L-1 {
-                self.error_acc[j].add_eq(&self.errors[j]);
-                self.weight_error_acc[j].add_eq(&self.weight_errors[j]);
-            }
-
-            if i % self.meta_data.batch_size == 0 {
-                self.apply_gradient(self.meta_data.batch_size);
-                self.clear_accumulation_data();
-            }
-
-            let remainder = inputs.len() % self.meta_data.batch_size;
-            self.apply_gradient(remainder);
-        }
-    }
-
-    // NOTE: d_cost not used? check equation sheet for reference 
-
     /// Trains network against a provided set of inputs and expected outputs,  
     /// storing the error results in the 'errors' and 'weight_errors' buffers
-    pub fn train<M, N>(&mut self, input: &M, expected: &N) 
+    pub fn back_prop<M, N>(&mut self, input: &M, expected: &N) 
     where
         M: IMatrix,
         N: IMatrix
@@ -267,6 +224,40 @@ impl<const L: usize> Network<L> {
                 .mul(&self.errors[i]);
 
             self.errors.push(error_l);
+        }
+
+        // reverses layer error orders to ascending
+        self.weight_errors.reverse();
+        self.errors.reverse();
+    }
+
+    pub fn train<M, N>(&mut self, inputs: &[M], expected: &[N], take: usize) 
+    where
+        M: IMatrix,
+        N: IMatrix
+    {
+        if inputs.len() != expected.len() {
+            panic!()
+        }
+
+        self.clear_accumulation_data();
+
+        for (i, (input, expected)) in inputs.iter().take(take).zip(expected.iter()).enumerate() {
+            self.back_prop(input, expected);
+            
+            // accumulate errors
+            for j in 0..self.errors.len() {
+                self.error_acc[j].add_eq(&self.errors[j]);
+                self.weight_error_acc[j].add_eq(&self.weight_errors[j]);
+            }
+
+            if i % self.meta_data.batch_size == 0 {
+                self.apply_gradient(self.meta_data.batch_size);
+                self.clear_accumulation_data();
+            }
+
+            let remainder = inputs.len() % self.meta_data.batch_size;
+            self.apply_gradient(remainder);
         }
     }
 }

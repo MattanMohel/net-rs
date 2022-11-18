@@ -5,6 +5,8 @@ use net::Network;
 use one_hot::OneHot;
 use num::Num;
 
+use crate::mnist::DataType;
+
 pub mod matrix;
 pub mod num;
 pub mod net;
@@ -18,19 +20,55 @@ pub mod matrix_slice;
 fn main() {
     let mnist = Reader::new();
 
-    println!("images: {}", mnist.train_images().len());
+    let mut network = Network::new([784, 25, 10]);
 
-    let _network = Network::new([3, 5, 3]);
+    for i in 0..1000 {
+        network.train(mnist.train_images(), mnist.train_labels(), 10);
+    }
 
-    // let m1 = Matrix::<i32>::from_arr([[0, 1, 2], [3, 4, 5], [6, 7, 8]]);
-    // let m2 = m1.transpose();
-    // let prod = m1.mul(&m2);
+    let i = 3;
+
+    println!("{}", mnist.image_string(DataType::Train, i));
+
+    let out = network.forward_prop(&mnist.train_images()[i]);
+
+    println!("{}", out.to_string());
+
+    let mut max = out[0];
+    let mut index = 0;
+    for (i, n) in out.iter().enumerate() {
+        if n > max {
+            max = n;
+            index = i as i32;
+        }
+    }
+
+    println!("the number is {}, {}% sure!", index, max);
     
-    // println!("m1: {}", m1.to_string());
 
-    // println!("det of m1: {}", prod.determinant());
+    // network.train(mnist.train_images(), mnist.train_labels(), 5000);
 
-    // let hot = OneHot::<i32>::new(5, 1);
+    // let testing = [0, 1, 2];
 
-    // println!("{}", hot.to_string());
+    // for i in testing {  
+    //     let image = &mnist.train_images()[i];
+    //     let label = &mnist.train_labels()[i];
+    
+    //     println!("{}", mnist.image_string(DataType::Train, i));
+    
+    //     let out = network.forward_prop(image);
+    
+    //     println!("{}", out.to_string());
+    
+    //     let mut max = out[0];
+    //     let mut index = 0;
+    //     for (i, n) in out.iter().enumerate() {
+    //         if n > max {
+    //             max = n;
+    //             index = i as i32;
+    //         }
+    //     }
+    
+    //     println!("the number is {}! (expected {})", index, label.hot());
+    // }
 }
