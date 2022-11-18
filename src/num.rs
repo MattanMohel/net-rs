@@ -12,7 +12,7 @@ use std::ops::SubAssign;
 use rand::distributions::uniform::SampleUniform;
 
 /// Default numeral type
-pub type N = f64;
+pub type N = f32;
 
 pub trait Num:
     PartialEq +

@@ -4,7 +4,7 @@ use super::cost::Cost;
 use super::num::N;
 use super::matrix::*;
 
-const LEARN_RATE: f64 = 1.0;
+const LEARN_RATE: N = 0.03;
 const BATCH_SIZE: usize = 64;
 
 pub struct Meta<const L: usize> {
@@ -13,7 +13,7 @@ pub struct Meta<const L: usize> {
     // size of batch sampling
     pub batch_size: usize,
     // learning coefficient
-    pub learn_rate: f64,
+    pub learn_rate: N,
     // activation function
     pub activation: Activation,
     // cost function
@@ -146,7 +146,7 @@ impl<const L: usize> Network<L> {
 
     pub fn apply_gradient(&mut self, sample_size: usize) {
         // coefficient of learn rate
-        let learn_rate = self.meta_data.learn_rate / sample_size as f64;
+        let learn_rate = self.meta_data.learn_rate / sample_size as N;
 
         // apply stochastic error gradient 
         for j in 0..L-1 {

@@ -1,6 +1,6 @@
 use super::num::N;
 use super::num_fn::NumeralFn;
-use std::f64::consts::E;
+use std::f32::consts::E;
 
 /// Enumerated network activation function
 #[derive(Clone, Copy)]
