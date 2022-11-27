@@ -1,24 +1,22 @@
-use super::num_fn::NumeralFn;
-use super::num::N;
 
 /// Enumerated network cost function
 #[derive(Clone, Copy)]
 pub enum Cost {
-    Quad
+    Quad,
 }
 
 use Cost::*;
 
-impl NumeralFn<(N, N)> for Cost {
-    fn value(&self, (e, x): (N, N)) -> N {
+impl Cost {
+    pub fn value(&self, diff: f32) -> f32 {
         match self {
-            Quad => (e - x).powi(2)
+            Quad => diff.powi(2)
         }
     }
 
-    fn deriv(&self, (e, x): (N, N)) -> N {
+    pub fn deriv(&self,  diff: f32) -> f32 {
         match self {
-            Quad => 2. * (e - x)
+            Quad => 2. * diff
         }
     }
 }
