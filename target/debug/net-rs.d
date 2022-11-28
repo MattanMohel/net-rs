@@ -1,1 +1,0 @@
-C:\repo\Rust\net-rs\target\debug\net-rs.exe: C:\repo\Rust\net-rs\src\array.rs C:\repo\Rust\net-rs\src\cost.rs C:\repo\Rust\net-rs\src\linalg.rs C:\repo\Rust\net-rs\src\main.rs C:\repo\Rust\net-rs\src\mnist.rs C:\repo\Rust\net-rs\src\net.rs C:\repo\Rust\net-rs\src\num.rs C:\repo\Rust\net-rs\src\step.rs

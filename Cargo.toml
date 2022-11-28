@@ -8,6 +8,4 @@ edition = "2021"
 
 [dependencies]
 "matrixmultiply" = {version = "*", features=["threading"]}
-"nalgebra" = {version="*", features=["rand"]}
-"timer" = "*"
 "rand" = "*"
