@@ -251,13 +251,13 @@ impl<const L: usize> Network<L> {
                 self.weight_error_acc[j].add_eq(&self.weight_errors[j]);
             }
 
-            if i % self.meta_data.batch_size == 0 {
+            if i != 0 && i % self.meta_data.batch_size == 0 {
                 self.apply_gradient(self.meta_data.batch_size);
                 self.clear_accumulation_data();
             }
-
-            let remainder = inputs.len() % self.meta_data.batch_size;
-            self.apply_gradient(remainder);
         }
+
+        let remainder = inputs.len() % self.meta_data.batch_size;
+        self.apply_gradient(remainder);
     }
 }
