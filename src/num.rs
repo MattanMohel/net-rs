@@ -11,8 +11,10 @@ use std::ops::SubAssign;
 
 use rand::distributions::uniform::SampleUniform;
 
+/// Default numeral type
+pub type N = f32;
+
 pub trait Num:
-    SampleUniform + 
     PartialEq +
     PartialOrd +
     Add<Output=Self> + 
@@ -20,18 +22,39 @@ pub trait Num:
     Mul<Output=Self> +
     Div<Output=Self> +
     Neg<Output=Self> +
-    MulAssign<Self> + 
-    AddAssign<Self> + 
-    SubAssign<Self> +
-    ToString + 
-    fmt::Display + 
-    fmt::Debug + 
-    Copy + 
-    Sized
+    MulAssign + 
+    AddAssign + 
+    SubAssign +
+    SampleUniform +
+    fmt::Display + fmt::Debug + Copy + Sized
 {
     fn zero() -> Self;
     fn one() -> Self;
     fn two() -> Self;
+}
+
+impl Num for i32 {
+    fn zero() -> Self {
+        0_i32
+    }
+    fn one() -> Self {
+        1_i32
+    }
+    fn two() -> Self {
+        2_i32
+    }
+}
+
+impl Num for i64 {
+    fn zero() -> Self {
+        0_i64
+    }
+    fn one() -> Self {
+        1_i64
+    }
+    fn two() -> Self {
+        2_i64
+    }
 }
 
 impl Num for f32 {
