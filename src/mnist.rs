@@ -1,6 +1,17 @@
-use std::path::PathBuf;
-use crate::linalg::Vector;
-use crate::linalg::LinAlgGen;
+use std::fs::{self, File};
+use std::io::{Read, self, BufReader};
+use std::path::{PathBuf, Path};
+use std::slice::Chunks;
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use super::matrix::IMatrix;
+
+use crate::num::N;
+use crate::one_hot::OneHot;
+
+use super::matrix::Matrix;
+
+// PRONOT TODO: credit JonathanWoollett - download unzipped and port to resources
 
 /// MNIST Data Formatting Information
 ///
@@ -39,8 +50,8 @@ const LABEL_DATA_OFFSET: usize = 8;
 const IMAGE_MAGIC_NUMBER: u32 = 2051;
 const TRAIN_IMAGES_PATH: &str = "src/res/train-images";
 const TEST_IMAGES_PATH: &str =  "src/res/test-images";
-const _TRAIN_IMAGES: usize = 60_000;
-const _TEST_IMAGES:  usize = 10_000;
+const TRAIN_IMAGES: usize = 60_000;
+const TEST_IMAGES:  usize = 10_000;
 const IMAGE_DATA_OFFSET: usize = 16;
 const BYTES_PER_IMAGE: usize = 28*28;
 const BYTES_PER_AXIS: usize = 28;
@@ -48,10 +59,10 @@ const BYTES_PER_AXIS: usize = 28;
 /// Struct for reading and storing the 
 /// MNIST dataset data in a '.jpg' format
 pub struct Reader {
-    train_images: Vec<Vector>,
-    train_labels: Vec<Vector>,   
-    test_images:  Vec<Vector>,
-    test_labels:  Vec<Vector>
+    train_images: Vec<Matrix>,
+    train_labels: Vec<OneHot>,   
+    test_images: Vec<Matrix>,
+    test_labels: Vec<OneHot>
 }
 
 pub enum DataType {
@@ -82,7 +93,7 @@ impl Reader {
         println!("test labels: {}", self.test_images.len());
     }
 
-    fn read_labels(data_type: DataType, work_dir: &PathBuf) -> Vec<Vector> {
+    fn read_labels(data_type: DataType, work_dir: &PathBuf) -> Vec<OneHot> {
         let path = match data_type {
             DataType::Train => TRAIN_LABELS_PATH,
             DataType::Test =>  TEST_LABELS_PATH
@@ -102,11 +113,11 @@ impl Reader {
         
         label_bytes
             .iter()
-            .map(|label| Vector::one_hot(10, *label as usize))
+            .map(|label| OneHot::new(10, *label as usize))
             .collect()
     }
 
-    fn read_images(data_type: DataType, work_dir: &PathBuf) -> Vec<Vector> {
+    fn read_images(data_type: DataType, work_dir: &PathBuf) -> Vec<Matrix> {
         let path = match data_type {
             DataType::Train => TRAIN_IMAGES_PATH,
             DataType::Test =>  TEST_IMAGES_PATH
@@ -128,29 +139,29 @@ impl Reader {
         image_bytes
             .chunks(BYTES_PER_IMAGE)
             .map(|image| {
-                let buf: Vec<f32> = image
+                let buf = image
                     .iter()
-                    .map(|n| *n as f32)
+                    .map(|n| *n as N)
                     .collect();
 
-                Vector::from_buf(buf.len(), buf)
+                Matrix::from_buf((BYTES_PER_IMAGE, 1), buf)
             })
             .collect() 
     }
 
-    pub fn train_images(&self) -> &Vec<Vector> {
+    pub fn train_images(&self) -> &Vec<Matrix> {
         &self.train_images
     }
 
-    pub fn train_labels(&self) -> &Vec<Vector> {
+    pub fn train_labels(&self) -> &Vec<OneHot> {
         &self.train_labels
     }
 
-    pub fn test_images(&self) -> &Vec<Vector> {
+    pub fn test_images(&self) -> &Vec<Matrix> {
         &self.test_images
     }
 
-    pub fn test_labels(&self) -> &Vec<Vector> {
+    pub fn test_labels(&self) -> &Vec<OneHot> {
         &self.test_labels
     }
 
@@ -163,11 +174,10 @@ impl Reader {
         }
 
         images[index]
-            .buf()
             .iter()
             .enumerate()
             .map(|(i, n)| {
-                let ch = match *n as u8 {
+                let ch = match n as u8 {
                     0 => " ",
                     0..=50   => "+",
                     51..=100 => "#",
