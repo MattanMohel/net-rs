@@ -31,7 +31,6 @@ pub trait Num:
 {
     fn zero() -> Self;
     fn one() -> Self;
-    fn two() -> Self;
 }
 
 impl Num for f32 {
@@ -40,9 +39,6 @@ impl Num for f32 {
     }
     fn one() -> Self {
         1_f32
-    }
-    fn two() -> Self {
-        2_f32
     }
 }
 
@@ -53,7 +49,22 @@ impl Num for f64 {
     fn one() -> Self {
         1_f64
     }
-    fn two() -> Self {
-        2_f64
+}
+
+impl Num for i32 {
+    fn zero() -> Self {
+        0_i32
+    }
+    fn one() -> Self {
+        1_i32
+    }
+}
+
+impl Num for i64 {
+    fn zero() -> Self {
+        0_i64
+    }
+    fn one() -> Self {
+        1_i64
     }
 }

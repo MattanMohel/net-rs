@@ -63,7 +63,7 @@ impl Data {
     }
 }
 
-pub struct Network<const L: usize> {
+pub struct Net<const L: usize> {
     // hyper parameters
     data: Data,
     // weight matrices layers
@@ -89,7 +89,7 @@ pub struct Network<const L: usize> {
     acc_w_err: Array<Matrix>,
 }
 
-impl<const L: usize> Network<L> {
+impl<const L: usize> Net<L> {
     pub fn new(form: [usize; L]) -> Self {
         if form.len() <= 2 {
             panic!()

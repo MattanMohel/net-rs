@@ -77,6 +77,19 @@ where
         Self::from_map(dim, |_| rng.gen_range(-N::one()..N::one()))
     }
 
+    /// Returns the matrix transpose
+    fn transpose(&self) -> Matrix<N> {
+        let mut buf = Vec::with_capacity(self.row() * self.col());
+
+        for c in 0..self.col() {
+            for r in 0..self.row() {
+                buf.push(self.buf()[self.col() * r + c]);
+            }
+        }
+
+        Matrix::from_buf((self.col(), self.row()), buf)
+    }
+
     /// Sets self to element-wise multipication matrix
     fn dot_eq<M: LinAlgGen<N>>(&mut self, rhs: &M) -> &mut Self {
         if self.shape() != rhs.shape() {
@@ -214,16 +227,15 @@ where
     }
 
     fn to_string(&self) -> String {
-        let mut buf = String::new();
+        let len = 2*self.row()*self.col() + self.row();
+        let mut buf = String::with_capacity(len);
 
-        for (i, n) in self.buf().iter().enumerate() {
-            buf += &n.to_string();
-            buf.push(' ');
-
-            if i % self.col() == 0 {
-                // buf.push('\n');
+        for r in 0..self.row() {
+            for c in 0..self.col() {
+                buf.push_str(format!("{} ", self[Self::to_dim((r, c))]).as_str());
             }
-        }
+            buf.push('\n');
+        } 
 
         buf
     }
@@ -264,223 +276,242 @@ where
     }
     
     /// Multiplies lhs and rhs, using self as a buffer
-    fn mul_to<'a, M, K>(&self, _rhs: &M, _buf: &'a mut K) -> &'a mut K
+    fn mul_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
     where
         M: LinAlg<N>,
         K: LinAlg<N>
     {
-        unreachable!("unsupported multipication type")
+        if self.col() != rhs.row() {
+            panic!("DEDAULT IMPL - unmatched 'mul' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+        }
+
+        for i in 0..self.row() {
+            for j in 0..rhs.col() {
+                let mut acc = N::zero();
+                for k in 0..self.col() {
+                    acc += self.buf()[i * self.col() + k] * rhs.buf()[k * rhs.col() + j];
+                }
+
+                buf.buf_mut()[rhs.col() * i + j] = acc;
+            }
+        }
+
+        buf
     }
 
     /// Multiplies transpose lhs and rhs, using self as a buffer
-    fn mul_t1_to<'a, M, K>(&self, _rhs: &M, _buf: &'a mut K) -> &'a mut K
+    fn mul_t1_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
     where
         M: LinAlg<N>,
         K: LinAlg<N>
     {
-        unreachable!("unsupported transpose multipication type")
+        unimplemented!("no default mul_t1_to impl")
     }
 
     /// Multiplies lhs and transpose rhs, using self as a buffer
-    fn mul_t2_to<'a, M, K>(&self, _rhs: &M, _buf: &'a mut K) -> &'a mut K
+    fn mul_t2_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
     where
         M: LinAlg<N>,
         K: LinAlg<N>
     {
-        unreachable!("unsupported transpose multipication type")
+        unimplemented!("no default mul_t2_to impl")  
     }
 }
 
+impl<T: LinAlgGen<i32>> LinAlgMul<i32> for T {}
+impl<T: LinAlgGen<i64>> LinAlgMul<i64> for T {}
+
+
 impl<T: LinAlgGen<f32>> LinAlgMul<f32> for T {
     
-    fn mul_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
-    where
-        M: LinAlg<f32>,
-        K: LinAlg<f32>
-    {
-        if self.col() != rhs.row() {
-            panic!("unmatched 'mul' dimensions {:?} | {:?}", self.shape(), rhs.shape())
-        }
+    // fn mul_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
+    // where
+    //     M: LinAlg<f32>,
+    //     K: LinAlg<f32>
+    // {
+    //     if self.col() != rhs.row() {
+    //         panic!("unmatched 'mul' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+    //     }
 
-        unsafe {
-            matrixmultiply::sgemm(
-                self.row(), // m dimension
-                self.col(), // k dimension
-                rhs.col(),  // n dimension
-                1_f32,
-                self.buf().as_ptr(), // m x k matrix
-                self.col() as isize, // row stride
-                1,                   // col stride
-                rhs.buf().as_ptr(),  // k x n matrix
-                rhs.col() as isize,  // row stride
-                1,                   // col stride
-                1_f32,
-                buf.buf_mut().as_mut_ptr(), // m x n buffer 
-                buf.col() as isize,         // row stride
-                1                           // col stride
-            );
-        }
+    //     unsafe {
+    //         matrixmultiply::sgemm(
+    //             self.row(), // m dimension
+    //             self.col(), // k dimension
+    //             rhs.col(),  // n dimension
+    //             1_f32,
+    //             self.buf().as_ptr(), // m x k matrix
+    //             self.col() as isize, // row stride
+    //             1,                   // col stride
+    //             rhs.buf().as_ptr(),  // k x n matrix
+    //             rhs.col() as isize,  // row stride
+    //             1,                   // col stride
+    //             1_f32,
+    //             buf.buf_mut().as_mut_ptr(), // m x n buffer 
+    //             buf.col() as isize,         // row stride
+    //             1                           // col stride
+    //         );
+    //     }
 
-        buf
-    }
+    //     buf
+    // }
 
-    fn mul_t1_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
-    where
-        M: LinAlg<f32>,
-        K: LinAlg<f32>
-    { 
-        if self.row() != rhs.row() {
-            panic!("unmatched 'mul_t1' dimensions {:?} | {:?}", self.shape(), rhs.shape())
-        }
+    // fn mul_t1_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
+    // where
+    //     M: LinAlg<f32>,
+    //     K: LinAlg<f32>
+    // { 
+    //     if self.row() != rhs.row() {
+    //         panic!("unmatched 'mul_t1' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+    //     }
 
-        unsafe {
-            matrixmultiply::sgemm(
-                self.col(), // m dimension
-                self.row(), // k dimension
-                rhs.col(),  // n dimension
-                1_f32,
-                self.buf().as_ptr(), // m x k matrix
-                1,                   // row stride
-                self.col() as isize, // col stride
-                rhs.buf().as_ptr(),  // k x n matrix
-                rhs.col() as isize,  // row stride
-                1,                   // col stride
-                1_f32,
-                buf.buf_mut().as_mut_ptr(), // m x n buffer 
-                buf.col() as isize,         // row stride
-                1                           // col stride
-            );
-        }
+    //     unsafe {
+    //         matrixmultiply::sgemm(
+    //             self.col(), // m dimension
+    //             self.row(), // k dimension
+    //             rhs.col(),  // n dimension
+    //             1_f32,
+    //             self.buf().as_ptr(), // m x k matrix
+    //             1,                   // row stride
+    //             self.col() as isize, // col stride
+    //             rhs.buf().as_ptr(),  // k x n matrix
+    //             rhs.col() as isize,  // row stride
+    //             1,                   // col stride
+    //             1_f32,
+    //             buf.buf_mut().as_mut_ptr(), // m x n buffer 
+    //             buf.col() as isize,         // row stride
+    //             1                           // col stride
+    //         );
+    //     }
 
-        buf
-    }
+    //     buf
+    // }
 
-    fn mul_t2_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
-    where
-        M: LinAlg<f32>,
-        K: LinAlg<f32>
-    { 
-        if self.col() != rhs.col() {
-            panic!("unmatched 'mul_t2' dimensions {:?} | {:?}", self.shape(), rhs.shape())
-        }
+    // fn mul_t2_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K
+    // where
+    //     M: LinAlg<f32>,
+    //     K: LinAlg<f32>
+    // { 
+    //     if self.col() != rhs.col() {
+    //         panic!("unmatched 'mul_t2' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+    //     }
 
-        unsafe {
-            matrixmultiply::sgemm(
-                self.row(), // m dimension
-                self.col(), // k dimension
-                rhs.row(),  // n dimension
-                1_f32,
-                self.buf().as_ptr(), // m x k matrix
-                self.col() as isize, // row stride
-                1,                   // col stride
-                rhs.buf().as_ptr(),  // k x n matrix
-                1,                   // row stride
-                rhs.col() as isize,  // col stride
-                1_f32,
-                buf.buf_mut().as_mut_ptr(), // m x n buffer 
-                buf.col() as isize,         // row stride
-                1                           // col stride
-            );
-        }
+    //     unsafe {
+    //         matrixmultiply::sgemm(
+    //             self.row(), // m dimension
+    //             self.col(), // k dimension
+    //             rhs.row(),  // n dimension
+    //             1_f32,
+    //             self.buf().as_ptr(), // m x k matrix
+    //             self.col() as isize, // row stride
+    //             1,                   // col stride
+    //             rhs.buf().as_ptr(),  // k x n matrix
+    //             1,                   // row stride
+    //             rhs.col() as isize,  // col stride
+    //             1_f32,
+    //             buf.buf_mut().as_mut_ptr(), // m x n buffer 
+    //             buf.col() as isize,         // row stride
+    //             1                           // col stride
+    //         );
+    //     }
 
-        buf
-    }
+    //     buf
+    // }
 }
 
 impl<T: LinAlgGen<f64>> LinAlgMul<f64> for T {
     
-    fn mul_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K 
-    where
-        M: LinAlg<f64>,
-        K: LinAlg<f64>
-    {  
-        if self.col() != rhs.row() {
-            panic!("unmatched 'mul' dimensions {:?} | {:?}", self.shape(), rhs.shape())
-        }
+    // fn mul_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K 
+    // where
+    //     M: LinAlg<f64>,
+    //     K: LinAlg<f64>
+    // {  
+    //     if self.col() != rhs.row() {
+    //         panic!("unmatched 'mul' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+    //     }
 
-        unsafe {
-            matrixmultiply::dgemm(
-                self.row(), // m dimension
-                self.col(), // k dimension
-                rhs.col(),  // n dimension
-                1_f64,
-                self.buf().as_ptr(), // m x k matrix
-                self.col() as isize, // row stride
-                1,                   // col stride
-                rhs.buf().as_ptr(),  // k x n matrix
-                rhs.col() as isize,  // row stride
-                1,                   // col stride
-                1_f64,
-                buf.buf_mut().as_mut_ptr(), // m x n buffer 
-                buf.col() as isize,         // row stride
-                1                           // col stride
-            );
-        }
+    //     unsafe {
+    //         matrixmultiply::dgemm(
+    //             self.row(), // m dimension
+    //             self.col(), // k dimension
+    //             rhs.col(),  // n dimension
+    //             1_f64,
+    //             self.buf().as_ptr(), // m x k matrix
+    //             self.col() as isize, // row stride
+    //             1,                   // col stride
+    //             rhs.buf().as_ptr(),  // k x n matrix
+    //             rhs.col() as isize,  // row stride
+    //             1,                   // col stride
+    //             1_f64,
+    //             buf.buf_mut().as_mut_ptr(), // m x n buffer 
+    //             buf.col() as isize,         // row stride
+    //             1                           // col stride
+    //         );
+    //     }
 
-        buf
-    }
+    //     buf
+    // }
 
-    fn mul_t1_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K 
-    where
-        M: LinAlg<f64>,
-        K: LinAlg<f64>
-    {    
-        if self.row() != rhs.row() {
-            panic!("unmatched 'mul_t1' dimensions {:?} | {:?}", self.shape(), rhs.shape())
-        }
+    // fn mul_t1_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K 
+    // where
+    //     M: LinAlg<f64>,
+    //     K: LinAlg<f64>
+    // {    
+    //     if self.row() != rhs.row() {
+    //         panic!("unmatched 'mul_t1' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+    //     }
 
-        unsafe {
-            matrixmultiply::dgemm(
-                self.col(), // m dimension
-                self.row(), // k dimension
-                rhs.col(),  // n dimension
-                1_f64,
-                self.buf().as_ptr(), // m x k matrix
-                1,                   // row stride
-                self.col() as isize, // col stride
-                rhs.buf().as_ptr(),  // k x n matrix
-                rhs.col() as isize,  // row stride
-                1,                   // col stride
-                1_f64,
-                buf.buf_mut().as_mut_ptr(), // m x n buffer 
-                buf.col() as isize,         // row stride
-                1                           // col stride
-            );
-        }
+    //     unsafe {
+    //         matrixmultiply::dgemm(
+    //             self.col(), // m dimension
+    //             self.row(), // k dimension
+    //             rhs.col(),  // n dimension
+    //             1_f64,
+    //             self.buf().as_ptr(), // m x k matrix
+    //             1,                   // row stride
+    //             self.col() as isize, // col stride
+    //             rhs.buf().as_ptr(),  // k x n matrix
+    //             rhs.col() as isize,  // row stride
+    //             1,                   // col stride
+    //             1_f64,
+    //             buf.buf_mut().as_mut_ptr(), // m x n buffer 
+    //             buf.col() as isize,         // row stride
+    //             1                           // col stride
+    //         );
+    //     }
 
-        buf
-    }
+    //     buf
+    // }
 
-    fn mul_t2_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K 
-    where
-        M: LinAlg<f64>,
-        K: LinAlg<f64>
-    {   
-        if self.col() != rhs.col() {
-            panic!("unmatched 'mul_t2' dimensions {:?} | {:?}", self.shape(), rhs.shape())
-        }
+    // fn mul_t2_to<'a, M, K>(&self, rhs: &M, buf: &'a mut K) -> &'a mut K 
+    // where
+    //     M: LinAlg<f64>,
+    //     K: LinAlg<f64>
+    // {   
+    //     if self.col() != rhs.col() {
+    //         panic!("unmatched 'mul_t2' dimensions {:?} | {:?}", self.shape(), rhs.shape())
+    //     }
 
-        unsafe {
-            matrixmultiply::dgemm(
-                self.row(), // m dimension
-                self.col(), // k dimension
-                rhs.row(),  // n dimension
-                1_f64,
-                self.buf().as_ptr(), // m x k matrix
-                self.col() as isize, // row stride
-                1,                   // col stride
-                rhs.buf().as_ptr(),  // k x n matrix
-                1,                   // rpw stride
-                rhs.col() as isize,  // cpl stride
-                1_f64,
-                buf.buf_mut().as_mut_ptr(), // m x n buffer 
-                buf.col() as isize,         // row stride
-                1                           // col stride
-            );
-        }
+    //     unsafe {
+    //         matrixmultiply::dgemm(
+    //             self.row(), // m dimension
+    //             self.col(), // k dimension
+    //             rhs.row(),  // n dimension
+    //             1_f64,
+    //             self.buf().as_ptr(), // m x k matrix
+    //             self.col() as isize, // row stride
+    //             1,                   // col stride
+    //             rhs.buf().as_ptr(),  // k x n matrix
+    //             1,                   // rpw stride
+    //             rhs.col() as isize,  // cpl stride
+    //             1_f64,
+    //             buf.buf_mut().as_mut_ptr(), // m x n buffer 
+    //             buf.col() as isize,         // row stride
+    //             1                           // col stride
+    //         );
+    //     }
 
-        buf
-    }
+    //     buf
+    // }
 }
 
 #[derive(Clone)]
@@ -634,6 +665,10 @@ impl<N: Num> LinAlg<N> for Vector<N> where Vector<N>: LinAlgMul<N>
 {}
 
 impl<N: Num> Vector<N> {
+    pub fn to_matrix(&self) -> Matrix<N> {
+        Matrix::from_buf(self.shape(), self.buf.clone())
+    }
+
     pub fn diagonal(&self) -> Matrix<N> {
         Matrix::from_map((self.row, self.row), |(r, c)| {
             if r == c {
