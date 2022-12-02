@@ -30,16 +30,23 @@ where
         }
     }
 
+    pub fn new() -> Self {
+        Self { 
+            buf: Vec::new(), 
+            _t: PhantomData::default() 
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.buf.len()
+    }
+    
     pub fn fill(&mut self, fill: N) -> &mut Self {
         for mat in self.buf.iter_mut() {
             mat.fill_eq(fill);
         }
 
         self
-    }
-
-    pub fn len(&self) -> usize {
-        self.buf.len()
     }
 }
 

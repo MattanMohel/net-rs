@@ -1,4 +1,8 @@
 
+use std::ops::Range;
+
+use crate::array::Array;
+
 use super::step::Step;
 use super::cost::Cost;
 use super::linalg::*;
@@ -8,9 +12,9 @@ type N = f32;
 const LEARN_RATE: N = 0.03;
 const BATCH_SIZE: usize = 64;
 
-pub struct Meta<const L: usize> {
+pub struct Meta {
     // layer sizes
-    pub form: [usize; L],
+    pub form: Vec<usize>,
     // size of batch sampling
     pub batch_size: usize,
     // learning coefficient
@@ -21,44 +25,68 @@ pub struct Meta<const L: usize> {
     pub cost: Cost,
 }
 
-impl<const L: usize> Meta<L> {
-    pub fn new(form: [usize; L]) -> Self {
+impl Meta {
+    pub fn new(form: &[usize]) -> Self {
         Self { 
-            form,
+            form: form.to_vec(),
             batch_size: BATCH_SIZE, 
             learn_rate: LEARN_RATE, 
             step: Step::Sig, 
             cost: Cost::Quad, 
         }
     }
+
+    fn zero_array<M, R, F>(&self, range: R, func: F) -> Array<M>
+    where
+        M: LinAlg,
+        R: Fn(usize) -> Range<usize>,
+        F: Fn(usize, &[usize]) -> M::Dim,   
+    {
+        let buf = range(self.form.len())
+            .map(|i| M::from_zeros(func(i, &self.form)))
+            .collect();
+
+        Array::from_buf(buf)
+    }
+
+    fn rand_array<M, R, F>(&self, range: R, func: F) -> Array<M> 
+    where
+        M: LinAlg,
+        R: Fn(usize) -> Range<usize>,
+        F: Fn(usize, &[usize]) -> M::Dim,   
+    {
+        let buf = range(self.form.len())
+            .map(|i| M::rand(func(i, &self.form)))
+            .collect();
+
+        Array::from_buf(buf)
+    }
 }
 
-
-/// NOTE: NETWORK FOR DEBUG PURPOSES - REVERSE ENGINEER BUG!!!
 pub struct Network<const L: usize> {
     // hyper parameters
-    meta_data: Meta<L>,
+    meta_data: Meta,
     // weight matrices layers
-    weights: Vec<Matrix>,
+    weights: Array<Matrix>,
     // bias matrices layers
-    biases: Vec<Matrix>,
+    biases: Array<Matrix>,
 
     /////////////////////
     /// Training Data ///
     /////////////////////
 
     // steps buffer
-    steps: Vec<Matrix>,
+    steps: Array<Matrix>,
     // layer sums buffer
-    sums: Vec<Matrix>,
+    sums: Array<Matrix>,
     // layer error buffer
-    errors: Vec<Matrix>,
+    errors: Array<Matrix>,
     // layer error accumulation buffer
-    error_acc: Vec<Matrix>,
+    error_acc: Array<Matrix>,
     // weight error buffer
-    weight_errors: Vec<Matrix>,
+    weight_errors: Array<Matrix>,
     // weight error accumulation buffer
-    weight_error_acc: Vec<Matrix>
+    weight_error_acc: Array<Matrix>
 }
 
 impl<const L: usize> Network<L> {
@@ -67,59 +95,66 @@ impl<const L: usize> Network<L> {
             panic!()
         }
 
+        let meta = Meta::new(&form);
+
         Self { 
-            meta_data: Meta::new(form),
             
-            biases: {
-                (1..form.len())
-                    .map(|i| Matrix::from_zeros((form[i], 1)))
-                    .collect()
-            },
+            biases: meta.zero_array(|l| 1..l, |i, f| (f[i], 1)),
+            // {
+                //     (1..form.len())
+                //         .map(|i| Matrix::from_zeros((form[i], 1)))
+                //         .collect()
+                // },
+                
+            weights: meta.rand_array(|l| 0..l-1, |i, f| (f[i+1], f[i])),
+            // {
+            //     (0..form.len()-1)
+            //     .map(|i| Matrix::rand((form[i+1], form[i])))
+            //     .collect()
+            // },
             
-            weights: {
-                (0..form.len()-1)
-                    .map(|i| Matrix::rand((form[i+1], form[i])))
-                    .collect()
-            },
-
-            steps: Vec::new(),
-
-            sums: Vec::new(),
-
-            errors: Vec::new(),
-
-            weight_errors: Vec::new(),
-
-            error_acc: {
-                (1..form.len())
-                    .map(|i| Matrix::from_zeros((form[i], 1)))
-                    .collect()
-            },
+            steps: Array::new(),
+            
+            sums: Array::new(),
+            
+            errors: Array::new(),
+            
+            weight_errors: Array::new(),
+            
+            error_acc: meta.zero_array(|l| 1..l, |i, f| (f[i], 1)),
+            // {
+            //     (1..form.len())
+            //     .map(|i| Matrix::from_zeros((form[i], 1)))
+            //     .collect()
+            // },
 
 
-            weight_error_acc: {
-                (0..form.len()-1)
-                    .map(|i| Matrix::from_zeros((form[i+1], form[i])))
-                    .collect()
-            }
+            weight_error_acc: meta.zero_array(|l| 0..l-1, |i, f| (f[i+1], f[i])),
+            // {
+            //     (0..form.len()-1)
+            //         .map(|i| Matrix::from_zeros((form[i+1], form[i])))
+            //         .collect()
+            // },
+
+            meta_data: meta,
         }
     }
-
+    
     /// Clears propagation buffers
     pub fn clear_propagation_data(&mut self) {
-        self.steps.clear();
-        self.sums.clear();
-        self.errors.clear();
-        self.weight_errors.clear();
+        self.steps.buf.clear();
+        self.sums.buf.clear();
+        self.errors.buf.clear();
+        self.weight_errors.buf.clear();
     }
-
+    
     /// Clears accumulation buffers
     pub fn clear_accumulation_data(&mut self) {
-        for err in self.error_acc.iter_mut() {
-            err.fill_eq(0.);
+        for err in self.error_acc.buf.iter_mut() {
+            err.fill_eq(0.0);
         }
-        for weight_err in  self.weight_error_acc.iter_mut() {
-            weight_err.fill_eq(0.);
+        for weight_err in  self.weight_error_acc.buf.iter_mut() {
+            weight_err.fill_eq(0.0);
         }
     }
 
@@ -134,16 +169,16 @@ impl<const L: usize> Network<L> {
     }
 
     /// Computes layer cost matrix
-    fn cost_matrix<M: LinAlg>(&self, exp: &M,  layer: usize) -> Matrix {
+    fn cost_matrix(&self, exp: Matrix,  layer: usize) -> Matrix {
         Matrix::from_map(exp.shape(), |r_c| {
-            self.meta_data.cost.value(exp[M::to_dim(r_c)] - self.steps[layer][r_c])
+            self.meta_data.cost.value(exp[r_c] - self.steps[layer][r_c])
         })
     }
 
     /// Computes layer cost derivative matrix
-    fn d_cost_matrix<M: LinAlg>(&self, exp: &M,  layer: usize) -> Matrix {
+    fn d_cost_matrix(&self, exp: &Matrix,  layer: usize) -> Matrix {
         Matrix::from_map(exp.shape(), |r_c| {
-            self.meta_data.cost.deriv(exp[M::to_dim(r_c)] - self.steps[layer][r_c])
+            self.meta_data.cost.deriv(exp[r_c] - self.steps[layer][r_c])
         })
     }
 
@@ -158,14 +193,14 @@ impl<const L: usize> Network<L> {
         }
     }
 
-    pub fn forward_prop(&self, input: &Vector) -> Matrix {
+    pub fn forward_prop(&self, input: &Matrix) -> Matrix {
         if input.row() != self.meta_data.form[0] {
             panic!()
         }
 
-        self.weights
+        self.weights.buf
             .iter()
-            .zip(self.biases.iter())
+            .zip(self.biases.buf.iter())
             .fold(input.to_matrix(), |acc, (weight, bias)| {
                 weight
                     .mul::<_, Matrix>(&acc)
@@ -176,12 +211,12 @@ impl<const L: usize> Network<L> {
 
     /// Trains network against a provided set of inputs and expected outputs,  
     /// storing the error results in the 'errors' and 'weight_errors' buffers
-    pub fn back_prop(&mut self, input: &Vector, expected: &Vector) {
+    pub fn back_prop(&mut self, input: &Matrix, expected: &Matrix) {
         // clear previous training data
         self.clear_propagation_data();
         
         // push initial input as layer_0
-        self.steps.push(input.to_matrix());
+        self.steps.buf.push(input.to_matrix());
 
         for i in 0..L-1 {
             // sum_l = weights_l * steps_l-1 + biases_l
@@ -192,25 +227,24 @@ impl<const L: usize> Network<L> {
             let step_l = sum_l
                 .map(|n| self.activate(n));
 
-            self.steps.push(step_l);
-            self.sums.push(sum_l);
+            self.steps.buf.push(step_l);
+            self.sums.buf.push(sum_l);
         }
 
         // error_L = d_step( sum_L-1 ) * cost( steps_L )
         let error = self.sums[L-2]
             .map(|n| self.d_activate(n))
-            .to_vector()
-            .diagonal()
+            .to_diagonal()
             .mul(&self.d_cost_matrix(expected, L-1));
 
-        self.errors.push(error);
+        self.errors.buf.push(error);
 
         for (i, l) in (0..L-1).map(|i| (i, L-2-i)) {
             // weight_error_L = error_L * transpose( steps_L-1 )
             let weight_error_l = self.errors[L-2-l]
                 .mul(&self.steps[l].transpose());
 
-            self.weight_errors.push(weight_error_l);
+            self.weight_errors.buf.push(weight_error_l);
 
             if l == 0 {
                 break
@@ -219,20 +253,19 @@ impl<const L: usize> Network<L> {
             // error_L-1 = diagonal . d_step( sum_L-1 ) * transpose( weights_L ) * error_L
             let error_l = self.sums[l-1]
                 .map(|n| self.d_activate(n))
-                .to_vector()
-                .diagonal()
+                .to_diagonal()
                 .mul::<_, Matrix>(&self.weights[l].transpose())
                 .mul(&self.errors[i]);
 
-            self.errors.push(error_l);
+            self.errors.buf.push(error_l);
         }
 
         // reverses layer error orders to ascending
-        self.weight_errors.reverse();
-        self.errors.reverse();
+        self.weight_errors.buf.reverse();
+        self.errors.buf.reverse();
     }
 
-    pub fn train(&mut self, inputs: &[Vector], expected: &[Vector], take: usize) {
+    pub fn train(&mut self, inputs: &[Matrix], expected: &[Matrix], take: usize) {
         if inputs.len() != expected.len() {
             panic!()
         }
@@ -248,13 +281,13 @@ impl<const L: usize> Network<L> {
                 self.weight_error_acc[j].add_eq(&self.weight_errors[j]);
             }
 
-            if i % self.meta_data.batch_size == 0 {
+            if i != 0 && i % self.meta_data.batch_size == 0 {
                 self.apply_gradient(self.meta_data.batch_size);
                 self.clear_accumulation_data();
             }
-
-            let remainder = inputs.len() % self.meta_data.batch_size;
-            self.apply_gradient(remainder);
         }
+
+        let remainder = inputs.len() % self.meta_data.batch_size;
+        self.apply_gradient(remainder);
     }
 }

@@ -23,23 +23,21 @@ fn main() {
 
     // println!("p1: {}", p1.to_string());
 
-    let target = [Vector::from_arr([0.23_f32, 0.9, 0.01])];
-    let input = [Vector::from_arr([0.30_f32, 0.20, 0.86])];
+    let target = [Matrix::from_buf((3, 1), vec![0.23_f32, 0.9, 0.01])];
+    let input = [Matrix::from_buf((3, 1), vec![0.30_f32, 0.20, 0.86])];
 
     let mut net = network::Network::new([3, 5, 3]);
 
-    for _ in 0..10000 {
-        net.back_prop(&input[0], &target[0]);
-        net.apply_gradient(1);
-        net.clear_accumulation_data();
+    for _ in 0..100000 {
+        net.train(&input, &target, 1);
     }
 
     let output = net.forward_prop(&input[0]);
 
     println!(
         "output: \n\n{} \n\nexpected: \n\n{}",
-        output.to_string(),
-        target[0].to_string()
+        output.as_string(),
+        target[0].as_string()
     );
 
     // let mnist = Reader::new();

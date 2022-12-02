@@ -33,6 +33,8 @@ pub trait Num:
     fn one() -> Self;
 }
 
+pub trait Int {}
+
 impl Num for f32 {
     fn zero() -> Self {
         0_f32
@@ -51,6 +53,7 @@ impl Num for f64 {
     }
 }
 
+impl Int for i32 {}
 impl Num for i32 {
     fn zero() -> Self {
         0_i32
@@ -60,6 +63,7 @@ impl Num for i32 {
     }
 }
 
+impl Int for i64 {}
 impl Num for i64 {
     fn zero() -> Self {
         0_i64

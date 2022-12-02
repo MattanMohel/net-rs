@@ -190,7 +190,7 @@ impl<const L: usize> Net<L> {
 
         self.sums[Back(0)]
             .map(|n| self.d_step(n))
-            .diagonal()
+            .to_diagonal()
             .mul_to(
                 &exp.sub(&self.acts[Back(0)]).map(|n| self.d_step(n)),
                 &mut self.err[Back(0)]
@@ -209,7 +209,7 @@ impl<const L: usize> Net<L> {
 
             self.sums[Back(lr+1)]
                 .map(|n| self.d_step(n))
-                .diagonal()
+                .to_diagonal()
                 .mul_t2::<_, Matrix>(&self.weights[Back(lr)])
                 .mul_to(&self.err[Back(lr)].clone(), &mut self.err[Back(lr+1)]);
 
