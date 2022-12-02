@@ -9,6 +9,7 @@ pub enum IndexType {
     Back(usize)
 }
 
+#[derive(Clone)]
 pub struct Array<M, N=f32> 
 where
     N: Num,

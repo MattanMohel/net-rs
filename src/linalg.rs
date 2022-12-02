@@ -11,7 +11,7 @@ where
 
 pub trait LinAlgGen<N: Num=f32> 
 where 
-    Self: Sized + Index<Self::Dim, Output=N> + IndexMut<Self::Dim, Output=N>
+    Self: Sized + Index<Self::Dim, Output=N> + IndexMut<Self::Dim, Output=N> + PartialEq
 {
     type Dim: Copy;
 
@@ -156,6 +156,15 @@ where
     fn fill_eq(&mut self, value: N) -> &mut Self {
         for n in self.buf_mut().iter_mut() {
             *n = value;
+        }
+
+        self
+    }
+
+    /// Sets all elements of self to zero
+    fn fill_zero(&mut self) -> &mut Self {
+        for n in self.buf_mut().iter_mut() {
+            *n = N::zero();
         }
 
         self
@@ -359,6 +368,8 @@ impl<T: LinAlgGen<f32>> LinAlgMul<f32> for T {
             panic!("cannot multiply {:?} by {:?}", self.shape(), rhs.shape())
         }
 
+        buf.fill_zero();
+
         unsafe {
             matrixmultiply::sgemm(
                 self.row(), // m dimension
@@ -390,6 +401,8 @@ impl<T: LinAlgGen<f32>> LinAlgMul<f32> for T {
             panic!("cannot multiply T{:?} by {:?}", self.shape(), rhs.shape())
         }
 
+        buf.fill_zero();
+
         unsafe {
             matrixmultiply::sgemm(
                 self.col(), // m dimension
@@ -420,6 +433,8 @@ impl<T: LinAlgGen<f32>> LinAlgMul<f32> for T {
         if self.col() != rhs.col() {
             panic!("cannot multiply {:?} by T{:?}", self.shape(), rhs.shape())
         }
+
+        buf.fill_zero();
 
         unsafe {
             matrixmultiply::sgemm(
@@ -455,6 +470,8 @@ impl<T: LinAlgGen<f64>> LinAlgMul<f64> for T {
             panic!("cannot multiply {:?} by {:?}", self.shape(), rhs.shape())
         }
 
+        buf.fill_zero();
+
         unsafe {
             matrixmultiply::dgemm(
                 self.row(), // m dimension
@@ -485,6 +502,8 @@ impl<T: LinAlgGen<f64>> LinAlgMul<f64> for T {
         if self.row() != rhs.row() {
             panic!("cannot multiply T{:?} by {:?}", self.shape(), rhs.shape())
         }
+
+        buf.fill_zero();
 
         unsafe {
             matrixmultiply::dgemm(
@@ -517,6 +536,8 @@ impl<T: LinAlgGen<f64>> LinAlgMul<f64> for T {
             panic!("cannot multiply {:?} by T{:?}", self.shape(), rhs.shape())
         }
 
+        buf.fill_zero();
+
         unsafe {
             matrixmultiply::dgemm(
                 self.row(), // m dimension
@@ -540,7 +561,7 @@ impl<T: LinAlgGen<f64>> LinAlgMul<f64> for T {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Matrix<N: Num=f32> {
     buf: Vec<N>,
     row: usize,
@@ -616,7 +637,7 @@ impl<N: Num> Matrix<N> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Vector<N: Num=f32> {
     buf: Vec<N>,
     row: usize

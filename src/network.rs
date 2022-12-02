@@ -2,6 +2,7 @@
 use std::ops::Range;
 
 use crate::array::Array;
+use crate::array::IndexType::Back;
 
 use super::step::Step;
 use super::cost::Cost;
@@ -76,11 +77,11 @@ pub struct Network<const L: usize> {
     /////////////////////
 
     // steps buffer
-    steps: Array<Matrix>,
+    step: Array<Matrix>,
     // layer sums buffer
     sums: Array<Matrix>,
     // layer error buffer
-    errors: Array<Matrix>,
+    err: Array<Matrix>,
     // layer error accumulation buffer
     error_acc: Array<Matrix>,
     // weight error buffer
@@ -98,53 +99,25 @@ impl<const L: usize> Network<L> {
         let meta = Meta::new(&form);
 
         Self { 
-            
-            biases: meta.zero_array(|l| 1..l, |i, f| (f[i], 1)),
-            // {
-                //     (1..form.len())
-                //         .map(|i| Matrix::from_zeros((form[i], 1)))
-                //         .collect()
-                // },
-                
-            weights: meta.rand_array(|l| 0..l-1, |i, f| (f[i+1], f[i])),
-            // {
-            //     (0..form.len()-1)
-            //     .map(|i| Matrix::rand((form[i+1], form[i])))
-            //     .collect()
-            // },
-            
-            steps: Array::new(),
-            
-            sums: Array::new(),
-            
-            errors: Array::new(),
-            
-            weight_errors: Array::new(),
-            
-            error_acc: meta.zero_array(|l| 1..l, |i, f| (f[i], 1)),
-            // {
-            //     (1..form.len())
-            //     .map(|i| Matrix::from_zeros((form[i], 1)))
-            //     .collect()
-            // },
-
-
-            weight_error_acc: meta.zero_array(|l| 0..l-1, |i, f| (f[i+1], f[i])),
-            // {
-            //     (0..form.len()-1)
-            //         .map(|i| Matrix::from_zeros((form[i+1], form[i])))
-            //         .collect()
-            // },
-
+            step:       meta.zero_array(|l| 0..l,   |i, f| (f[i], 1)),
+            sums:              meta.zero_array(|l| 1..l,   |i, f| (f[i], 1)),
+            err:            meta.zero_array(|l| 1..l,   |i, f| (f[i], 1)),
+            error_acc:         meta.zero_array(|l| 1..l,   |i, f| (f[i], 1)),
+            biases:            meta.zero_array(|l| 1..l,   |i, f| (f[i], 1)),          
+            weights:           meta.rand_array(|l| 0..l-1, |i, f| (f[i+1], f[i] )),
+            weight_errors:     meta.zero_array(|l| 0..l-1, |i, f| (f[i+1], f[i] )),
+            weight_error_acc:  meta.zero_array(|l| 0..l-1, |i, f| (f[i+1], f[i] )),
             meta_data: meta,
         }
     }
     
     /// Clears propagation buffers
     pub fn clear_propagation_data(&mut self) {
-        self.steps.buf.clear();
-        self.sums.buf.clear();
-        self.errors.buf.clear();
+        self.step.fill(0.);
+        self.sums.fill(0.);
+
+
+        self.err.buf.clear();
         self.weight_errors.buf.clear();
     }
     
@@ -164,22 +137,20 @@ impl<const L: usize> Network<L> {
     }
 
     /// Applies step derivative to one number
-    fn d_activate(&self, n: N) -> N {
+    fn d_step(&self, n: N) -> N {
         self.meta_data.step.deriv(n)
     }
 
     /// Computes layer cost matrix
     fn cost_matrix(&self, exp: Matrix,  layer: usize) -> Matrix {
         Matrix::from_map(exp.shape(), |r_c| {
-            self.meta_data.cost.value(exp[r_c] - self.steps[layer][r_c])
+            self.meta_data.cost.value(exp[r_c] - self.step[layer][r_c])
         })
     }
 
     /// Computes layer cost derivative matrix
-    fn d_cost_matrix(&self, exp: &Matrix,  layer: usize) -> Matrix {
-        Matrix::from_map(exp.shape(), |r_c| {
-            self.meta_data.cost.deriv(exp[r_c] - self.steps[layer][r_c])
-        })
+    fn d_cost(&self, diff: f32) -> f32 {
+        self.meta_data.cost.deriv(diff)
     }
 
     pub fn apply_gradient(&mut self, sample_size: usize) {
@@ -193,56 +164,57 @@ impl<const L: usize> Network<L> {
         }
     }
 
-    pub fn forward_prop(&self, input: &Matrix) -> Matrix {
+    pub fn forward_prop(&mut self, input: &Matrix) -> Matrix {
         if input.row() != self.meta_data.form[0] {
             panic!()
         }
 
-        self.weights.buf
-            .iter()
-            .zip(self.biases.buf.iter())
-            .fold(input.to_matrix(), |acc, (weight, bias)| {
-                weight
-                    .mul::<_, Matrix>(&acc)
-                    .add(bias)
-                    .map(|n| self.activate(n))
-            })
+        self.step[0] = input.clone();
+
+        for lr in 0..L-1 {                  
+            self.weights[lr].mul_to(&self.step[lr], &mut self.sums[lr]);
+            self.sums[lr].add_eq(&self.biases[lr]);
+            
+            self.step[lr+1] = self.sums[lr].map(|n| self.activate(n));
+        }
+
+        self.step[Back(0)].clone()
     }
 
     /// Trains network against a provided set of inputs and expected outputs,  
     /// storing the error results in the 'errors' and 'weight_errors' buffers
-    pub fn back_prop(&mut self, input: &Matrix, expected: &Matrix) {
+    pub fn back_prop(&mut self, input: &Matrix, out: &Matrix) {
         // clear previous training data
         self.clear_propagation_data();
         
-        // push initial input as layer_0
-        self.steps.buf.push(input.to_matrix());
+        self.forward_prop(input);
 
-        for i in 0..L-1 {
-            // sum_l = weights_l * steps_l-1 + biases_l
-            let sum_l = self.weights[i]
-                .mul::<_, Matrix>(&self.steps[i])
-                .add(&self.biases[i]);
-            // step_l = activate( sum_l )
-            let step_l = sum_l
-                .map(|n| self.activate(n));
+        // let e = self.sums[Back(0)]
+        //     .map(|n| self.d_step(n))
+        //     .to_diagonal()
+        //     .mul(
+        //         &self.d_cost_matrix(out, L-1),
+        //     );
 
-            self.steps.buf.push(step_l);
-            self.sums.buf.push(sum_l);
-        }
+        let e = self.sums[Back(0)]
+            .map(|n| self.d_step(n))
+            .to_diagonal()
+            .mul(&out.sub(&self.step[Back(0)]).map(|n| self.d_cost(n)));
+
+        // self.meta_data.cost.value(exp[r_c] - self.step[layer][r_c])
+
 
         // error_L = d_step( sum_L-1 ) * cost( steps_L )
-        let error = self.sums[L-2]
-            .map(|n| self.d_activate(n))
-            .to_diagonal()
-            .mul(&self.d_cost_matrix(expected, L-1));
+        // let error = self.sums[L-2]
+        //     .map(|n| self.d_step(n))
+        //     .to_diagonal()
+        //     .mul(&self.d_cost_matrix(out, L-1));
 
-        self.errors.buf.push(error);
+        self.err.buf.push(e);
 
         for (i, l) in (0..L-1).map(|i| (i, L-2-i)) {
             // weight_error_L = error_L * transpose( steps_L-1 )
-            let weight_error_l = self.errors[L-2-l]
-                .mul(&self.steps[l].transpose());
+            let weight_error_l = self.err[i].mul_t2(&self.step[Back(1+i)]);
 
             self.weight_errors.buf.push(weight_error_l);
 
@@ -251,18 +223,18 @@ impl<const L: usize> Network<L> {
             }
 
             // error_L-1 = diagonal . d_step( sum_L-1 ) * transpose( weights_L ) * error_L
-            let error_l = self.sums[l-1]
-                .map(|n| self.d_activate(n))
+            let error_l = self.sums[Back(i+1)]
+                .map(|n| self.d_step(n))
                 .to_diagonal()
-                .mul::<_, Matrix>(&self.weights[l].transpose())
-                .mul(&self.errors[i]);
+                .mul::<_, Matrix>(&self.weights[Back(i)].transpose())
+                .mul(&self.err[i]);
 
-            self.errors.buf.push(error_l);
+            self.err.buf.push(error_l);
         }
 
         // reverses layer error orders to ascending
         self.weight_errors.buf.reverse();
-        self.errors.buf.reverse();
+        self.err.buf.reverse();
     }
 
     pub fn train(&mut self, inputs: &[Matrix], expected: &[Matrix], take: usize) {
@@ -276,8 +248,8 @@ impl<const L: usize> Network<L> {
             self.back_prop(input, expected);
             
             // accumulate errors
-            for j in 0..self.errors.len() {
-                self.error_acc[j].add_eq(&self.errors[j]);
+            for j in 0..self.err.len() {
+                self.error_acc[j].add_eq(&self.err[j]);
                 self.weight_error_acc[j].add_eq(&self.weight_errors[j]);
             }
 
