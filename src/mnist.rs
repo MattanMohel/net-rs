@@ -39,8 +39,8 @@ const LABEL_DATA_OFFSET: usize = 8;
 const IMAGE_MAGIC_NUMBER: u32 = 2051;
 const TRAIN_IMAGES_PATH: &str = "src/res/train-images";
 const TEST_IMAGES_PATH: &str =  "src/res/test-images";
-const _TRAIN_IMAGES: usize = 60_000;
-const _TEST_IMAGES:  usize = 10_000;
+pub const TRAIN_IMAGES: usize = 60_000;
+pub const TEST_IMAGES:  usize = 10_000;
 const IMAGE_DATA_OFFSET: usize = 16;
 const BYTES_PER_IMAGE: usize = 28*28;
 const BYTES_PER_AXIS: usize = 28;
@@ -61,11 +61,8 @@ pub enum DataType {
 
 impl Reader {
     pub fn new() -> Self {
-        let mut work_dir = std::env::current_dir().expect("invalid working dir");
-
-        if work_dir.ends_with("src") {
-            work_dir.pop();
-        }
+        let work_dir = std::env::current_dir()
+            .expect("invalid working directory!");
 
         Self { 
             train_images: Self::read_images(DataType::Train, &work_dir),
@@ -75,7 +72,7 @@ impl Reader {
         }
     }
 
-    pub fn statistics(&self) {
+    pub fn stats(&self) {
         println!("train images: {}", self.train_images.len());
         println!("train labels: {}", self.train_labels.len());
         println!("test images: {}", self.test_images.len());
@@ -89,7 +86,7 @@ impl Reader {
         };
 
         let mut label_bytes = std::fs::read(work_dir.join(path))
-            .expect("couldnt read labels");
+            .expect("couldnt read labels!");
 
         assert_eq!(Self::read_be_u32(&label_bytes[0..4]), LABEL_MAGIC_NUMBER);
 
@@ -114,7 +111,7 @@ impl Reader {
 
         
         let mut image_bytes = std::fs::read(work_dir.join(path))
-            .expect("couldn't read images");
+            .expect("couldn't read images!");
         
         assert_eq!(Self::read_be_u32(&image_bytes[0..4]), IMAGE_MAGIC_NUMBER);
         
@@ -130,7 +127,7 @@ impl Reader {
             .map(|image| {
                 let buf: Vec<f32> = image
                     .iter()
-                    .map(|n| *n as f32)
+                    .map(|n| *n as f32 / 255.)
                     .collect();
 
                 Vector::from_buf(buf.len(), buf)
@@ -167,13 +164,14 @@ impl Reader {
             .iter()
             .enumerate()
             .map(|(i, n)| {
-                let ch = match *n as u8 {
-                    0 => " ",
-                    0..=50   => "+",
-                    51..=100 => "#",
-                    _ => "@",
+                let ch = if *n > 0.8 {
+                    '@'
+                } else if *n > 0.4 {
+                    '#'
+                } else {
+                    ' '
                 };
-
+   
                 if i % BYTES_PER_AXIS == 0 {
                     format!(" {}\n", ch)
                 }

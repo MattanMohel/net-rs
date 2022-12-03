@@ -9,7 +9,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/net-rs.exe",
-            "args": [],
+            "args": [],       
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],

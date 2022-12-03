@@ -1,6 +1,7 @@
-use std::{ops::{Index, IndexMut}, process::Output};
+use std::{ops::{Index, IndexMut, Deref}, process::Output};
 
 use rand::{distributions::Standard, prelude::Distribution, Rng};
+use serde_derive::{Serialize, Deserialize};
 
 use crate::num::{Num, Int};
 
@@ -561,7 +562,7 @@ impl<T: LinAlgGen<f64>> LinAlgMul<f64> for T {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Matrix<N: Num=f32> {
     buf: Vec<N>,
     row: usize,
@@ -637,7 +638,7 @@ impl<N: Num> Matrix<N> {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Vector<N: Num=f32> {
     buf: Vec<N>,
     row: usize
@@ -711,5 +712,16 @@ impl<N: Num> Vector<N> {
             buf,
             row
         }
+    }
+
+    pub fn hot(&self) -> usize {
+        let mut max = 0;
+        for i in 1..self.buf.len() {
+            if self.buf[i] > self.buf[max] {
+                max = i;
+            }
+        }
+        
+        max
     }
 }
