@@ -9,7 +9,7 @@ edition = "2021"
 [dependencies]
 "matrixmultiply" = { features=["threading"], version = "0.3.2" }
 "serde" = { deatures=["derive"], version = "1.0.148" }
-"derive_builder" = "0.12.0"
 "serde_derive" = "1.0.148"
 "serde_json" = "1.0.89"
 "rand" =  "0.8.5"
+"nannou" = "0.18.1"
