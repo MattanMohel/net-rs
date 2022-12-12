@@ -12,9 +12,10 @@ The network aims to identify 'handwritten' digits from ```0-9``` (hopefully accu
 - [x] MNIST data loader
 - [x] get basic network structure
 - [x] drawing app
-- [x] serialization with Serde
-- [x] momentum
-- [ ] improve accuracy / generalization
+- [x] model serialization with Serde
+- [x] momentum optimizer
+- [ ] improve model accuracy / generalization
+- [ ] multithreaded data training
 - [ ] rework matrix library trait abstractions
 - [ ] create generic Data trait for feeding network data
 
